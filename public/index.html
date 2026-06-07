@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LGP – Jogo de Palavras Gestuais</title>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+<!-- Estilos separados -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ONBOARDING -->
+<div class="onboard-overlay" id="onboard">
+  <div class="onboard-logo">🤚</div>
+  <div>
+    <div class="onboard-title">LGP Palavras</div>
+    <p class="onboard-sub">Soletra palavras usando a Língua Gestual Portuguesa. A câmara analisa os teus gestos em tempo real.</p>
+  </div>
+  <div class="permission-steps">
+    <div class="perm-step"><span class="perm-icon">📷</span><span>Precisamos de acesso à câmara para detetar os teus gestos manuais</span></div>
+    <div class="perm-step"><span class="perm-icon">✋</span><span>Mostra as letras em LGP — mantém o gesto 1 segundo e depois desliza o punho fechado para confirmar</span></div>
+    <div class="perm-step"><span class="perm-icon">🎯</span><span>Palavras de 4 letras em português — quantas consegues adivinhar?</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%;max-width:300px">
+    <button class="btn primary" onclick="startGame()">▶ Iniciar Jogo</button>
+    <p style="font-size:0.7rem;color:var(--text2);font-family:'Space Mono',monospace;text-align:center">Necessário câmara e JavaScript</p>
+  </div>
+</div>
+
+<header>
+  <div class="logo-glyph">LG</div>
+  <div>
+    <h1>LGP Palavras</h1>
+    <p>Língua Gestual Portuguesa · Jogo de Soletração</p>
+  </div>
+</header>
+
+<div class="main-layout">
+
+  <!-- PAINEL ESQUERDO -->
+  <div class="left-panel">
+
+    <!-- Câmara -->
+    <div class="cam-wrapper">
+      <video id="videoEl" playsinline></video>
+      <canvas id="canvasEl"></canvas>
+      <div class="cam-placeholder" id="camPlaceholder">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+        <span>Câmara não iniciada</span>
+      </div>
+      <div class="gesture-overlay" id="gestureOverlay">A detetar gesto...</div>
+      <div class="swipe-hint" id="swipeHint">👉</div>
+      <div class="cam-status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText" style="color:var(--text2)">Aguardar câmara</span>
+        <span style="margin-left:auto;color:var(--text2);font-size:0.65rem" id="fpsLabel"></span>
+      </div>
+    </div>
+
+    <!-- Gesto atual -->
+    <div class="gesture-display">
+      <div class="gesture-big" id="gestureEmoji">—</div>
+      <div class="gesture-info">
+        <div class="gesture-label">Gesto atual</div>
+        <div class="gesture-name" id="gestureName">Nenhum gesto detetado</div>
+        <div class="confirm-bar">
+          <div class="confirm-fill" id="confirmFill"></div>
+        </div>
+        <div class="confirm-label" id="confirmLabel">Mantém o gesto para confirmar</div>
+      </div>
+    </div>
+
+    <!-- Palavra atual -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+        <div style="font-size:0.65rem;color:var(--text2);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.12em">Palavra Atual</div>
+        <div class="swipe-indicator" id="swipeIndicator">
+          <span>✊→</span><span>Confirmar letra</span>
+        </div>
+      </div>
+      <div class="letter-track" id="letterTrack"></div>
+      <div class="progress-dots" id="progressDots" style="margin-top:0.75rem"></div>
+    </div>
+
+    <!-- Barra de erro -->
+    <div class="wrong-mode-bar" id="wrongBar">
+      ❌ Palavra incorreta! Tenta novamente...
+    </div>
+
+    <!-- Botões -->
+    <div style="display:flex;gap:0.75rem">
+      <button class="btn danger" onclick="skipWord()">Passar ›</button>
+      <button class="btn" onclick="resetCurrentWord()">↺ Reiniciar</button>
+    </div>
+  </div>
+
+  <!-- PAINEL DIREITO -->
+  <div class="right-panel">
+
+    <!-- Pontuação -->
+    <div class="panel-card">
+      <div class="panel-title">Pontuação</div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-val" id="scoreVal">0</div>
+          <div class="stat-lbl">Pontos</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="roundVal">1</div>
+          <div class="stat-lbl">Ronda</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="streakVal">0</div>
+          <div class="stat-lbl">Série</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instruções -->
+    <div class="panel-card">
+      <div class="panel-title">Como Jogar</div>
+      <div class="instr-list">
+        <div class="instr-item"><div class="instr-num">1</div><div class="instr-text">Mostra a letra em LGP para a câmara</div></div>
+        <div class="instr-item"><div class="instr-num">2</div><div class="instr-text">Mão direita = mostrar letra LGP (mantém ~1 segundo)</div></div>
+        <div class="instr-item"><div class="instr-num">3</div><div class="instr-text">Mão esquerda 👍 polegar para cima = confirmar letra</div></div>
+        <div class="instr-item"><div class="instr-num">4</div><div class="instr-text">4 letras completas = verificação automática</div></div>
+      </div>
+    </div>
+
+    <!-- Alfabeto LGP -->
+    <div class="panel-card">
+      <div class="panel-title">Alfabeto LGP</div>
+      <div class="lgp-grid" id="lgpGrid"></div>
+    </div>
+
+    <!-- Histórico -->
+    <div class="panel-card">
+      <div class="panel-title">Histórico</div>
+      <div class="history-list" id="historyList">
+        <div style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--text2)">Nenhum jogo ainda...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY DE RESULTADO -->
+<div class="result-overlay" id="resultOverlay">
+  <div class="result-card">
+    <div class="result-emoji" id="resultEmoji">🎉</div>
+    <div class="result-title" id="resultTitle">Correto!</div>
+    <div class="result-word" id="resultWord">CASA</div>
+    <div class="result-subtitle" id="resultSubtitle">Parabéns! Soletrou a palavra corretamente.</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem">
+      <button class="btn primary" onclick="nextWord()">Próxima Palavra ›</button>
+      <button class="btn" onclick="closeResult()">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- Lógica do jogo -->
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "lgp-palavras",
+  "version": "1.0.0",
+  "description": "Jogo de soletração com Língua Gestual Portuguesa via câmara em tempo real",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev":   "node server.js"
+  },
+  "keywords": ["lgp", "língua gestual", "mediapipe", "câmara", "jogo"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
