@@ -1,47 +1,42 @@
 // =======================================================
-// game.js — LGP Palavras v3
-// Fluxo: mão direita mostra letra → mantém 1s → barra enche
-//        mão esquerda 👍 confirma letra (qualquer das 4)
-//        após 4 letras → verificação estilo TERMO
-//        verde = letra certa e posição certa
-//        amarelo = letra existe mas posição errada
-//        cinzento = letra não existe
+// game.js — LGP Palavras v4
+// Classificador reescrito com base na imagem de referência
+// do alfabeto gestual (dactilologia)
 // =======================================================
 
 // -------------------------------------------------------
-// 1. ALFABETO LGP — Dactilologia Portuguesa
+// 1. ALFABETO — descrições baseadas na imagem de referência
 // -------------------------------------------------------
 const LGP_ALPHABET = {
-  'A': { desc: 'Punho fechado, polegar estendido para o lado' },
-  'B': { desc: 'Mão aberta, 4 dedos juntos para cima, polegar dobrado' },
-  'C': { desc: 'Dedos curvados formando um C, polegar oposto' },
-  'D': { desc: 'Indicador reto para cima, polegar toca no médio' },
-  'E': { desc: 'Quatro dedos dobrados, polegar dobrado por baixo' },
-  'F': { desc: 'Polegar e indicador em círculo, outros estendidos' },
-  'G': { desc: 'Indicador e polegar horizontais para o lado' },
-  'H': { desc: 'Indicador e médio juntos, horizontais' },
-  'I': { desc: 'Só o mínimo estendido, outros fechados' },
-  'J': { desc: 'Mínimo estendido, traça um J no ar' },
-  'K': { desc: 'Indicador para cima, médio diagonal, polegar entre eles' },
-  'L': { desc: 'Polegar e indicador formam L a 90°' },
-  'M': { desc: 'Três dedos (ind+méd+anel) dobrados sobre o polegar' },
-  'N': { desc: 'Dois dedos (ind+médio) dobrados sobre o polegar' },
-  'O': { desc: 'Todos os dedos curvados formando um O' },
-  'P': { desc: 'Indicador aponta para baixo, polegar estendido' },
-  'Q': { desc: 'Indicador e polegar apontam para baixo' },
-  'R': { desc: 'Indicador e médio cruzados (entrelaçados)' },
-  'S': { desc: 'Punho fechado, polegar por cima dos dedos' },
-  'T': { desc: 'Polegar entre indicador e médio' },
-  'U': { desc: 'Indicador e médio juntos e estendidos para cima' },
-  'V': { desc: 'Indicador e médio separados em V' },
-  'W': { desc: 'Indicador, médio e anelar estendidos e separados' },
-  'X': { desc: 'Indicador dobrado em gancho/anzol' },
-  'Y': { desc: 'Polegar e mínimo estendidos (shaka)' },
-  'Z': { desc: 'Indicador traça Z no ar' },
+  'A': { desc: 'Punho fechado, polegar estendido ao lado (não por cima)' },
+  'B': { desc: '4 dedos juntos para cima, polegar dobrado contra a palma' },
+  'C': { desc: 'Mão em forma de C — dedos e polegar curvados' },
+  'D': { desc: 'Indicador para cima, polegar + outros dedos formam círculo' },
+  'E': { desc: 'Todos os dedos semifechados curvados para baixo, polegar por baixo' },
+  'F': { desc: 'Polegar + indicador em OK, 3 dedos estendidos para cima' },
+  'G': { desc: 'Indicador e polegar apontam horizontalmente para o lado' },
+  'H': { desc: 'Indicador e médio juntos, estendidos horizontalmente' },
+  'I': { desc: 'Só o mínimo para cima, outros fechados' },
+  'J': { desc: 'Mínimo para cima, traça J no ar (igual a I com movimento)' },
+  'K': { desc: 'Indicador e médio em V com polegar entre eles, palma virada' },
+  'L': { desc: 'Polegar e indicador formam L a 90°, outros fechados' },
+  'M': { desc: '3 dedos (ind+méd+anel) dobrados sobre o polegar fechado' },
+  'N': { desc: '2 dedos (ind+médio) dobrados sobre o polegar' },
+  'O': { desc: 'Todos os dedos curvados formando um O com o polegar' },
+  'P': { desc: 'Indicador aponta para baixo, polegar estendido horizontal' },
+  'R': { desc: 'Indicador cruzado por cima do médio (entrelaçados)' },
+  'S': { desc: 'Punho fechado, polegar por cima/frente dos dedos dobrados' },
+  'T': { desc: 'Polegar sai entre o indicador e o médio, punho semi-fechado' },
+  'U': { desc: 'Indicador e médio juntos e paralelos, apontados para cima' },
+  'V': { desc: 'Indicador e médio separados em V de vitória' },
+  'W': { desc: 'Indicador, médio e anelar estendidos e separados (3 dedos)' },
+  'X': { desc: 'Indicador dobrado em gancho/anzol, outros fechados' },
+  'Y': { desc: 'Polegar e mínimo estendidos, outros fechados (shaka 🤙)' },
+  'Z': { desc: 'Indicador estendido para cima, traça Z no ar' },
 };
 
 // -------------------------------------------------------
-// 2. LISTA DE PALAVRAS (4 letras)
+// 2. PALAVRAS (4 letras, português)
 // -------------------------------------------------------
 const WORD_LIST = [
   'CASA','MAPA','BOLA','VELA','FACA','GATO','MESA','LAGO','PATO','ROSA',
@@ -55,60 +50,208 @@ const WORD_LIST = [
 ];
 
 // -------------------------------------------------------
-// 3. CLASSIFICADOR DE GESTOS
+// 3. CLASSIFICADOR — baseado na imagem de referência
+//
+// MediaPipe devolve 21 landmarks normalizados [0..1]:
+//   0=pulso  1-4=polegar  5-8=indicador  9-12=médio
+//   13-16=anelar  17-20=mínimo
+//
+// tip  = ponta do dedo  (4,8,12,16,20)
+// pip  = 2ª articulação (3,6,10,14,18)
+// mcp  = base do dedo   (2,5, 9,13,17)
 // -------------------------------------------------------
 class GestureClassifier {
-  _features(lm) {
-    const tipIds = [4, 8, 12, 16, 20];
-    const pipIds = [3, 6, 10, 14, 18];
-    const dist   = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-    const ext    = [];
-    ext.push(lm[4].x < lm[3].x ? 1 : 0); // polegar
-    for (let i = 1; i < 5; i++) ext.push(lm[tipIds[i]].y < lm[pipIds[i]].y ? 1 : 0);
-    return { ext, thumbIndex: dist(lm[4], lm[8]), indexMiddle: dist(lm[8], lm[12]) };
+
+  _f(lm) {
+    // --- Extensão de cada dedo (1=estendido, 0=dobrado) ---
+    // Polegar: compara X (câmara espelhada — mão direita do utilizador)
+    const thumbExt = lm[4].x < lm[2].x ? 1 : 0;
+
+    // Restantes dedos: ponta acima da articulação PIP = estendido
+    const idxExt  = lm[8].y  < lm[6].y  ? 1 : 0;
+    const midExt  = lm[12].y < lm[10].y ? 1 : 0;
+    const ringExt = lm[16].y < lm[14].y ? 1 : 0;
+    const pinkExt = lm[20].y < lm[18].y ? 1 : 0;
+
+    // --- Curvatura extra (ponta abaixo da base MCP = muito dobrado) ---
+    const idxCurl  = lm[8].y  > lm[5].y  ? 1 : 0;
+    const midCurl  = lm[12].y > lm[9].y  ? 1 : 0;
+    const ringCurl = lm[16].y > lm[13].y ? 1 : 0;
+    const pinkCurl = lm[20].y > lm[17].y ? 1 : 0;
+
+    // --- Distâncias normalizadas entre pontas ---
+    const d = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+    const palmSize      = d(lm[0], lm[9]);        // referência de escala
+    const thumbIdxDist  = d(lm[4], lm[8])  / palmSize;
+    const thumbMidDist  = d(lm[4], lm[12]) / palmSize;
+    const idxMidDist    = d(lm[8], lm[12]) / palmSize;
+    const idxRingDist   = d(lm[8], lm[16]) / palmSize;
+    const midRingDist   = d(lm[12],lm[16]) / palmSize;
+    const thumbIdxRaw   = d(lm[4], lm[8]);
+
+    // --- Orientação (dedo indicador horizontal vs vertical) ---
+    const idxDX = Math.abs(lm[8].x - lm[5].x);
+    const idxDY = Math.abs(lm[8].y - lm[5].y);
+    const idxHorizontal = idxDX > idxDY;   // indicador mais horizontal
+
+    // --- Polegar sobre os dedos (S) vs ao lado (A) ---
+    const thumbAboveIdx = lm[4].y < lm[8].y && lm[4].y < lm[6].y;
+    const thumbSideOfIdx = Math.abs(lm[4].x - lm[5].x) < 0.07;
+
+    return {
+      ext: [thumbExt, idxExt, midExt, ringExt, pinkExt],
+      curl: [idxCurl, midCurl, ringCurl, pinkCurl],
+      thumbIdxDist, thumbMidDist, idxMidDist, idxRingDist, midRingDist,
+      thumbIdxRaw, idxHorizontal, thumbAboveIdx, thumbSideOfIdx,
+      palmSize,
+    };
   }
 
-  // Mão DIREITA → letra
   classifyLetter(lm) {
     if (!lm || lm.length < 21) return null;
-    const f = this._features(lm);
-    const [thumb, idx, mid, ring, pink] = f.ext;
+    const f = this._f(lm);
+    const [th, ix, mi, ri, pk] = f.ext;
+    const [ic, mc, rc, pc]     = f.curl;
 
-    const allOpen    =  idx &&  mid &&  ring &&  pink;
-    const allClosed  = !idx && !mid && !ring && !pink;
-    const onlyIdx    =  idx && !mid && !ring && !pink;
-    const onlyPink   = !idx && !mid && !ring &&  pink;
-    const idxMid     =  idx &&  mid && !ring && !pink;
-    const idxMidRing =  idx &&  mid &&  ring && !pink;
+    // Atalhos booleanos
+    const allFingersOpen   =  ix &&  mi &&  ri &&  pk;
+    const allFingersClosed = !ix && !mi && !ri && !pk;
+    const onlyIndex        =  ix && !mi && !ri && !pk;
+    const onlyPinky        = !ix && !mi && !ri &&  pk;
+    const indexMiddle      =  ix &&  mi && !ri && !pk;
+    const indexMiddleRing  =  ix &&  mi &&  ri && !pk;
+    const thumbPinky       =  th && !ix && !mi && !ri &&  pk;
 
-    if (allClosed && !thumb)                                     return 'A';
-    if (allClosed && thumb && f.thumbIndex < 0.07)               return 'S';
-    if (allOpen && !thumb && f.indexMiddle < 0.07)               return 'B';
-    if (onlyIdx && !thumb && f.thumbIndex > 0.08)                return 'D';
-    if (onlyIdx && !thumb && f.thumbIndex <= 0.08)               return 'X';
-    if (onlyPink && !thumb)                                      return 'I';
-    if (thumb && !idx && !mid && !ring && pink)                   return 'Y';
-    if (thumb && onlyIdx && f.thumbIndex > 0.12)                 return 'L';
-    if (f.thumbIndex < 0.05 && allClosed)                        return 'O';
-    if (f.thumbIndex < 0.06 && mid && ring && pink)              return 'F';
-    if (idxMid && !thumb && f.indexMiddle < 0.035)               return 'R';
-    if (idxMid && !thumb && f.indexMiddle < 0.055)               return 'U';
-    if (idxMid && !thumb && f.indexMiddle >= 0.055)              return 'V';
-    if (idxMidRing && !pink && !thumb)                           return 'W';
-    if (thumb && idxMid && !ring && !pink)                       return 'K';
-    if (!allClosed && !allOpen && f.thumbIndex > 0.06 && f.thumbIndex < 0.18 && !idx && !mid) return 'C';
-    if (!idx && !mid && !ring && thumb && !pink && f.thumbIndex < 0.10)  return 'T';
-    if (!idx && !mid && !ring && thumb && !pink && f.thumbIndex >= 0.10) return 'M';
-    if (!idx && !mid && ring && thumb && !pink)                  return 'N';
+    // -------------------------------------------------------
+    // CLASSIFICAÇÃO LETRA A LETRA (ordem de prioridade)
+    // -------------------------------------------------------
+
+    // S — punho fechado, polegar POR CIMA/FRENTE dos dedos (thumbAboveIdx)
+    // Imagem: punho fechado, polegar dobrado à frente
+    if (allFingersClosed && f.thumbAboveIdx && f.thumbIdxDist < 0.35)
+      return 'S';
+
+    // A — punho fechado, polegar estendido AO LADO (não por cima)
+    // Imagem: punho, polegar saliente para o lado
+    if (allFingersClosed && th && !f.thumbAboveIdx)
+      return 'A';
+
+    // A sem polegar estendido detetado (margem)
+    if (allFingersClosed && !th)
+      return 'A';
+
+    // B — 4 dedos juntos estendidos para cima, polegar dobrado à palma
+    // idxMidDist pequena = dedos juntos
+    if (allFingersOpen && !th && f.idxMidDist < 0.18 && f.midRingDist < 0.18)
+      return 'B';
+
+    // D — só indicador, polegar toca nos outros formando círculo
+    // Imagem: indicador para cima, polegar+médio+anelar+mínimo em arco
+    if (onlyIndex && th && f.thumbMidDist < 0.45)
+      return 'D';
+
+    // D sem polegar detetado
+    if (onlyIndex && !th && f.thumbIdxDist > 0.3)
+      return 'D';
+
+    // I — só mínimo estendido
+    if (onlyPinky && !th)
+      return 'I';
+
+    // Y — polegar + mínimo (shaka)
+    if (thumbPinky)
+      return 'Y';
+
+    // L — polegar + indicador em L (90°), outros fechados
+    // Imagem: L claro com polegar horizontal e indicador vertical
+    if (th && onlyIndex && f.thumbIdxDist > 0.4)
+      return 'L';
+
+    // O — todos os dedos curvados formando O com polegar
+    // Imagem: todos curvados, ponta do polegar toca nas pontas
+    if (f.thumbIdxDist < 0.2 && !ix && !mi && !ri && !pk)
+      return 'O';
+
+    // F — polegar+indicador em OK, outros 3 dedos estendidos
+    // Imagem: círculo com polegar+indicador, médio+anelar+mínimo estendidos
+    if (f.thumbIdxDist < 0.25 && mi && ri && pk)
+      return 'F';
+
+    // C — forma de C, nenhum dedo totalmente estendido nem fechado
+    // Imagem: mão curvada em C, todos semi-curvados
+    if (!ix && !mi && !ri && !pk && !th
+        && f.thumbIdxDist > 0.25 && f.thumbIdxDist < 0.6)
+      return 'C';
+
+    // E — todos os dedos dobrados para baixo, polegar por baixo
+    // Imagem: todos curvados mas não punho fechado; polegar por baixo
+    if (ic && mc && rc && pc && !th && f.thumbIdxDist > 0.2)
+      return 'E';
+
+    // R — indicador cruzado COM o médio (entrelaçados), muito juntos
+    // Imagem: indicador e médio cruzados
+    if (indexMiddle && !th && f.idxMidDist < 0.08)
+      return 'R';
+
+    // U — indicador e médio juntos paralelos para cima
+    if (indexMiddle && !th && f.idxMidDist < 0.18)
+      return 'U';
+
+    // V — indicador e médio separados em V
+    if (indexMiddle && !th && f.idxMidDist >= 0.18)
+      return 'V';
+
+    // K — indicador e médio em V, polegar entre eles
+    // Imagem: V com polegar a tocar entre os dois dedos
+    if (th && indexMiddle && !ri && !pk && f.idxMidDist > 0.15)
+      return 'K';
+
+    // W — 3 dedos estendidos e separados
+    // Imagem: indicador+médio+anelar separados, mínimo e polegar fechados
+    if (indexMiddleRing && !pk && !th && f.idxRingDist > 0.2)
+      return 'W';
+
+    // X — indicador dobrado em gancho (curvado), outros fechados
+    // Imagem: indicador em gancho/anzol, outros fechados
+    if (!mi && !ri && !pk && !th && !ix && ic)
+      return 'X';
+
+    // H — indicador e médio estendidos HORIZONTALMENTE e juntos
+    // Imagem: dois dedos apontados para o lado
+    if (indexMiddle && !th && f.idxMidDist < 0.18 && f.idxHorizontal)
+      return 'H';
+
+    // G — indicador e polegar apontam horizontalmente para o lado
+    // Imagem: indicador + polegar horizontais como uma pistola
+    if (onlyIndex && th && f.idxHorizontal && f.thumbIdxDist > 0.2)
+      return 'G';
+
+    // P — indicador aponta para baixo com polegar estendido
+    if (onlyIndex && th && lm[8].y > lm[5].y)
+      return 'P';
+
+    // T — polegar entre indicador e médio
+    // Imagem: polegar aparece entre ind e médio, punho semi-fechado
+    if (th && !ix && !mi && !ri && !pk && f.thumbIdxRaw < 0.08)
+      return 'T';
+
+    // M — 3 dedos (ind+méd+anel) dobrados sobre polegar
+    if (!ix && !mi && !ri && th && !pk && ic && mc && rc)
+      return 'M';
+
+    // N — 2 dedos (ind+médio) dobrados sobre polegar
+    if (!ix && !mi && ri && th && !pk && ic && mc)
+      return 'N';
+
     return null;
   }
 
-  // Mão ESQUERDA → polegar para cima = confirmar 👍
+  // Mão esquerda — polegar para cima = confirmar 👍
   classifyConfirm(lm) {
     if (!lm || lm.length < 21) return false;
-    const f = this._features(lm);
-    const [thumb, idx, mid, ring, pink] = f.ext;
-    return thumb && !idx && !mid && !ring && !pink;
+    const f = this._f(lm);
+    const [th, ix, mi, ri, pk] = f.ext;
+    return th && !ix && !mi && !ri && !pk;
   }
 }
 
@@ -121,34 +264,27 @@ class LGPGame {
     this.words    = this._shuffle([...WORD_LIST]);
     this.wIdx     = 0;
 
-    // Estado por tentativa
-    this.target       = '';        // palavra a adivinhar
-    this.currentGuess = ['','','',''];  // letras da tentativa atual
-    this.activeSlot   = 0;         // slot a preencher agora (0-3)
-    this.allGuesses   = [];        // histórico de tentativas [{letters, colors}]
+    this.target       = '';
+    this.currentGuess = ['','','',''];
+    this.activeSlot   = 0;
+    this.allGuesses   = [];
     this.MAX_TRIES    = 6;
 
-    // Hold da mão direita
     this.HOLD_MS      = 1100;
     this.holdGesture  = null;
     this.holdStart    = null;
     this.holdProgress = 0;
     this.letterReady  = false;
 
-    // Anti-repetição: bloqueia até a mão sair após confirmação
-    this.lockedOut    = false;
-
-    // Cooldown do 👍 para evitar confirmações duplas
+    this.lockedOut       = false;
     this.confirmCooldown = false;
 
-    // Estado do jogo
-    this.gameOver  = false;
-    this.round     = 1;
-    this.score     = 0;
-    this.streak    = 0;
-    this.history   = [];
+    this.gameOver = false;
+    this.round    = 1;
+    this.score    = 0;
+    this.streak   = 0;
+    this.history  = [];
 
-    // FPS
     this.fpsCount = 0;
     this.fpsTimer = 0;
   }
@@ -183,9 +319,7 @@ class LGPGame {
     this._updateStats();
   }
 
-  // ---- Frame principal ----
   processFrame(handsData, ts) {
-    // FPS
     this.fpsCount++;
     if (ts - this.fpsTimer >= 1000) {
       document.getElementById('fpsLabel').textContent = `${this.fpsCount} fps`;
@@ -195,49 +329,37 @@ class LGPGame {
 
     if (this.gameOver) return;
 
-    let rightHand = null;
-    let leftHand  = null;
+    let rightHand = null, leftHand = null;
     for (const h of handsData) {
       if (h.label === 'Right') rightHand = h.landmarks;
       if (h.label === 'Left')  leftHand  = h.landmarks;
     }
 
-    // --- Anti-repetição: aguarda mão direita sair ---
+    // Anti-repetição
     if (this.lockedOut) {
       if (!rightHand) {
         this.lockedOut = false;
         this._resetGestureDisplay();
       } else {
-        document.getElementById('gestureName').textContent = '⏳ Retira a mão direita e mostra o próximo gesto';
+        document.getElementById('gestureName').textContent  = '⏳ Retira a mão direita e mostra o próximo gesto';
         document.getElementById('confirmLabel').textContent = 'Afasta a mão para continuar...';
         document.getElementById('confirmLabel').style.color = 'var(--accent2)';
       }
-      // Permite usar a esquerda para confirmar mesmo sem mover a direita
-      // (caso a letra já esteja pronta de antes)
       return;
     }
 
-    // --- MÃO DIREITA: reconhece a letra ---
-    if (!rightHand) {
-      this._resetGestureDisplay();
-      return;
-    }
+    if (!rightHand) { this._resetGestureDisplay(); return; }
 
     const gesture = this.clf.classifyLetter(rightHand);
 
-    if (!gesture) {
-      this._resetGestureDisplay();
-      return;
-    }
+    if (!gesture) { this._resetGestureDisplay(); return; }
 
-    // Atualiza display
+    // Atualiza UI
     document.getElementById('gestureEmoji').textContent = gesture;
     document.getElementById('gestureName').textContent  = LGP_ALPHABET[gesture].desc;
     document.getElementById('gestureOverlay').textContent = `Gesto: ${gesture}`;
     document.getElementById('gestureOverlay').classList.add('show');
     this._highlightAlphabet(gesture);
-
-    // Pré-visualiza a letra no slot ativo
     this._previewSlot(this.activeSlot, gesture);
 
     // Hold
@@ -249,17 +371,12 @@ class LGPGame {
     } else {
       this.holdProgress = Math.min(100, ((ts - this.holdStart) / this.HOLD_MS) * 100);
     }
-
-    if (this.holdProgress >= 100 && !this.letterReady) {
-      this.letterReady = true;
-    }
-
+    if (this.holdProgress >= 100) this.letterReady = true;
     this._updateConfirmBar(this.holdProgress, this.letterReady);
 
-    // --- MÃO ESQUERDA: 👍 confirma a letra ---
+    // Confirmação pela mão esquerda 👍
     if (this.letterReady && leftHand && !this.confirmCooldown) {
-      const ok = this.clf.classifyConfirm(leftHand);
-      if (ok) {
+      if (this.clf.classifyConfirm(leftHand)) {
         this._confirmCurrentLetter();
       }
     }
@@ -270,26 +387,22 @@ class LGPGame {
     const letter = this.holdGesture;
     if (!letter) return;
 
-    // Regista a letra
     this.currentGuess[this.activeSlot] = letter;
     this._solidifySlot(this.activeSlot, letter);
     this.activeSlot++;
 
-    // Reset hold
     this.holdGesture  = null;
     this.holdStart    = null;
     this.holdProgress = 0;
     this.letterReady  = false;
     this.lockedOut    = true;
 
-    // Cooldown 👍 para não confirmar logo a seguinte
     this.confirmCooldown = true;
     setTimeout(() => { this.confirmCooldown = false; }, 1200);
 
     this._updateConfirmBar(0, false);
     showToast(`✅ "${letter}" confirmada! (${this.activeSlot}/4)`);
 
-    // Se chegou a 4 letras → verifica a palavra
     if (this.activeSlot >= 4) {
       this.lockedOut = false;
       setTimeout(() => this._checkGuess(), 500);
@@ -298,43 +411,35 @@ class LGPGame {
 
   _checkGuess() {
     const guess  = this.currentGuess.join('');
-    const target = this.target;
-    const colors = this._calcColors(guess, target);
-
-    // Guarda tentativa
+    const colors = this._calcColors(guess, this.target);
     this.allGuesses.push({ letters: [...this.currentGuess], colors });
-
-    // Anima cores da linha atual
     this._animateGuessRow(this.allGuesses.length - 1, colors);
 
-    if (guess === target) {
-      // VITÓRIA
+    if (guess === this.target) {
       const pts = Math.max(10, 100 - (this.allGuesses.length - 1) * 15);
-      this.score += pts;
+      this.score  += pts;
       this.streak++;
       this.round++;
-      this.history.unshift({ word: target, result: 'win', tries: this.allGuesses.length });
+      this.history.unshift({ word: this.target, result: 'win', tries: this.allGuesses.length });
       this._updateStats();
       this._renderHistory();
       this.gameOver = true;
-      setTimeout(() => showResult(true, target, this.allGuesses.length, pts), 900);
+      setTimeout(() => showResult(true, this.target, this.allGuesses.length, pts), 900);
     } else if (this.allGuesses.length >= this.MAX_TRIES) {
-      // DERROTA — esgotou tentativas
       this.streak = 0;
-      this.history.unshift({ word: target, result: 'lose', tries: this.allGuesses.length });
+      this.history.unshift({ word: this.target, result: 'lose', tries: this.allGuesses.length });
       this._updateStats();
       this._renderHistory();
       this.gameOver = true;
-      setTimeout(() => showResult(false, target, this.allGuesses.length, 0), 900);
+      setTimeout(() => showResult(false, this.target, this.allGuesses.length, 0), 900);
     } else {
-      // Nova tentativa
       setTimeout(() => {
-        this.currentGuess = ['','','',''];
-        this.activeSlot   = 0;
-        this.holdGesture  = null;
-        this.holdProgress = 0;
-        this.letterReady  = false;
-        this.lockedOut    = false;
+        this.currentGuess    = ['','','',''];
+        this.activeSlot      = 0;
+        this.holdGesture     = null;
+        this.holdProgress    = 0;
+        this.letterReady     = false;
+        this.lockedOut       = false;
         this.confirmCooldown = false;
         document.getElementById('wrongBar').classList.remove('show');
         this._updateActiveRow();
@@ -343,90 +448,67 @@ class LGPGame {
     this._updateStats();
   }
 
-  // Algoritmo de cores estilo Termo/Wordle
   _calcColors(guess, target) {
-    const colors  = ['grey','grey','grey','grey'];
-    const tArr    = target.split('');
-    const used    = [false,false,false,false];
+    const colors = ['grey','grey','grey','grey'];
+    const tArr   = target.split('');
+    const used   = [false,false,false,false];
 
-    // 1ª passagem: verdes (posição certa)
     for (let i = 0; i < 4; i++) {
-      if (guess[i] === tArr[i]) {
-        colors[i] = 'green';
-        used[i]   = true;
-      }
+      if (guess[i] === tArr[i]) { colors[i] = 'green'; used[i] = true; }
     }
-    // 2ª passagem: amarelos (letra existe, posição errada)
     for (let i = 0; i < 4; i++) {
       if (colors[i] === 'green') continue;
       for (let j = 0; j < 4; j++) {
         if (!used[j] && guess[i] === tArr[j]) {
-          colors[i] = 'yellow';
-          used[j]   = true;
-          break;
+          colors[i] = 'yellow'; used[j] = true; break;
         }
       }
     }
     return colors;
   }
 
-  // ---- Renderização do tabuleiro ----
+  // ---- Tabuleiro ----
 
   _renderBoard() {
     const board = document.getElementById('letterTrack');
     board.innerHTML = '';
-    board.style.display        = 'flex';
-    board.style.flexDirection  = 'column';
-    board.style.gap            = '8px';
-    board.style.alignItems     = 'center';
+    board.style.cssText = 'display:flex;flex-direction:column;gap:8px;align-items:center;';
 
-    // 6 linhas (tentativas)
     for (let row = 0; row < this.MAX_TRIES; row++) {
       const rowEl = document.createElement('div');
-      rowEl.id        = `row-${row}`;
+      rowEl.id = `row-${row}`;
       rowEl.style.cssText = 'display:flex;gap:8px;';
 
       for (let col = 0; col < 4; col++) {
         const cell = document.createElement('div');
         cell.id = `cell-${row}-${col}`;
         cell.style.cssText = `
-          width:70px; height:70px;
-          border-radius:12px;
-          border:2px solid var(--border2);
-          background:var(--surface);
-          display:flex; align-items:center; justify-content:center;
-          font-size:2rem; font-weight:800;
-          font-family:'Syne',sans-serif;
-          color:var(--text);
-          transition: all 0.2s;
-          position:relative;
+          width:70px;height:70px;border-radius:12px;
+          border:2px solid var(--border2);background:var(--surface);
+          display:flex;align-items:center;justify-content:center;
+          font-size:2rem;font-weight:800;font-family:'Syne',sans-serif;
+          color:var(--text);transition:all 0.25s;position:relative;
         `;
-
-        // Número da coluna
         const num = document.createElement('div');
         num.style.cssText = 'position:absolute;top:4px;right:7px;font-size:0.52rem;font-family:\'Space Mono\',monospace;color:var(--text2);';
         num.textContent = col + 1;
+
+        const span = document.createElement('span');
+        span.id = `cell-letter-${row}-${col}`;
+
         cell.appendChild(num);
-
-        const letter = document.createElement('span');
-        letter.id = `cell-letter-${row}-${col}`;
-        letter.textContent = '';
-        cell.appendChild(letter);
-
+        cell.appendChild(span);
         rowEl.appendChild(cell);
       }
       board.appendChild(rowEl);
     }
 
-    // Esconde progress dots (não usados no modo tabuleiro)
     document.getElementById('progressDots').innerHTML = '';
     this._updateActiveRow();
   }
 
   _updateActiveRow() {
     const row = this.allGuesses.length;
-    if (row >= this.MAX_TRIES) return;
-    // Destaca a linha ativa
     for (let r = 0; r < this.MAX_TRIES; r++) {
       for (let c = 0; c < 4; c++) {
         const cell = document.getElementById(`cell-${r}-${c}`);
@@ -445,64 +527,46 @@ class LGPGame {
   _previewSlot(col, letter) {
     const row  = this.allGuesses.length;
     const span = document.getElementById(`cell-letter-${row}-${col}`);
-    if (span) {
-      span.textContent = letter;
-      span.style.color = 'var(--text2)';
-      span.style.opacity = '0.6';
-    }
+    if (span) { span.textContent = letter; span.style.color = 'var(--text2)'; span.style.opacity = '0.6'; }
   }
 
   _solidifySlot(col, letter) {
-    const row  = this.allGuesses.length; // ainda não avançou
+    const row  = this.allGuesses.length;
     const cell = document.getElementById(`cell-${row}-${col}`);
     const span = document.getElementById(`cell-letter-${row}-${col}`);
-    if (span) {
-      span.textContent = letter;
-      span.style.color = 'var(--text)';
-      span.style.opacity = '1';
-    }
+    if (span) { span.textContent = letter; span.style.color = 'var(--text)'; span.style.opacity = '1'; }
     if (cell) {
-      cell.style.borderColor = 'rgba(124,106,247,0.5)';
+      cell.style.borderColor = 'rgba(124,106,247,0.6)';
       cell.style.background  = 'rgba(124,106,247,0.12)';
-      // Animação de "bounce"
-      cell.style.transform = 'scale(1.08)';
-      setTimeout(() => { cell.style.transform = 'scale(1)'; }, 150);
+      cell.style.transform   = 'scale(1.09)';
+      setTimeout(() => { cell.style.transform = 'scale(1)'; }, 160);
     }
   }
 
   _animateGuessRow(rowIdx, colors) {
-    const colorMap = {
-      green : { bg: 'rgba(93,200,160,0.25)',  border: 'var(--success)', text: 'var(--success)' },
-      yellow: { bg: 'rgba(247,198,106,0.25)', border: 'var(--accent2)', text: 'var(--accent2)' },
-      grey  : { bg: 'rgba(80,80,120,0.2)',    border: 'rgba(150,150,180,0.3)', text: 'var(--text2)' },
+    const map = {
+      green : { bg:'rgba(93,200,160,0.22)',  border:'var(--success)', text:'var(--success)' },
+      yellow: { bg:'rgba(247,198,106,0.22)', border:'var(--accent2)', text:'var(--accent2)' },
+      grey  : { bg:'rgba(80,80,120,0.18)',   border:'rgba(120,120,160,0.35)', text:'var(--text2)' },
     };
-
     colors.forEach((color, col) => {
       setTimeout(() => {
         const cell = document.getElementById(`cell-${rowIdx}-${col}`);
         const span = document.getElementById(`cell-letter-${rowIdx}-${col}`);
         if (!cell) return;
-
-        const c = colorMap[color];
+        const c = map[color];
         cell.style.background  = c.bg;
         cell.style.borderColor = c.border;
         if (span) span.style.color = c.text;
-
-        // Flip animation
         cell.style.transform = 'rotateX(90deg)';
-        setTimeout(() => { cell.style.transform = 'rotateX(0deg)'; }, 120);
+        setTimeout(() => { cell.style.transform = 'rotateX(0deg)'; }, 130);
       }, col * 180);
     });
   }
 
-  // ---- Helpers UI ----
-
   _highlightAlphabet(letter) {
     document.querySelectorAll('.lgp-cell').forEach(c => c.classList.remove('highlight'));
-    if (letter) {
-      const cell = document.getElementById(`lgp-${letter}`);
-      if (cell) cell.classList.add('highlight');
-    }
+    if (letter) { const cell = document.getElementById(`lgp-${letter}`); if (cell) cell.classList.add('highlight'); }
   }
 
   _updateConfirmBar(pct, ready) {
@@ -511,7 +575,6 @@ class LGPGame {
     fill.style.width      = pct + '%';
     fill.style.background = ready ? 'var(--success)' : 'var(--accent)';
     label.style.color     = '';
-
     if (ready) {
       label.textContent = '✅ Pronto! Levanta o polegar esquerdo 👍 para confirmar';
       label.style.color = 'var(--success)';
@@ -546,17 +609,14 @@ class LGPGame {
     this.history.slice(0, 8).forEach(h => {
       const item = document.createElement('div');
       item.className = 'history-item';
-      item.innerHTML = `
-        <span class="history-word">${h.word}</span>
+      item.innerHTML = `<span class="history-word">${h.word}</span>
         <span class="history-attempts">${h.tries}x</span>
         <span class="history-badge ${h.result === 'win' ? 'win' : 'skip'}">
-          ${h.result === 'win' ? '✓ Ganhou' : '✗ Perdeu'}
-        </span>`;
+          ${h.result === 'win' ? '✓ Ganhou' : '✗ Perdeu'}</span>`;
       list.appendChild(item);
     });
   }
 
-  // Ações dos botões
   nextWord()  { this.newWord(); }
   skipWord()  {
     this.streak = 0;
@@ -568,24 +628,20 @@ class LGPGame {
     showToast('Palavra saltada');
   }
   resetWord() {
-    this.currentGuess = ['','','',''];
-    this.activeSlot   = 0;
-    this.holdGesture  = null;
-    this.holdStart    = null;
-    this.holdProgress = 0;
-    this.letterReady  = false;
-    this.lockedOut    = false;
+    this.currentGuess    = ['','','',''];
+    this.activeSlot      = 0;
+    this.holdGesture     = null;
+    this.holdStart       = null;
+    this.holdProgress    = 0;
+    this.letterReady     = false;
+    this.lockedOut       = false;
     this.confirmCooldown = false;
-    // Limpa só a linha atual
     const row = this.allGuesses.length;
     for (let c = 0; c < 4; c++) {
       const cell = document.getElementById(`cell-${row}-${c}`);
       const span = document.getElementById(`cell-letter-${row}-${c}`);
       if (span) span.textContent = '';
-      if (cell) {
-        cell.style.background  = 'rgba(124,106,247,0.06)';
-        cell.style.borderColor = 'var(--accent)';
-      }
+      if (cell) { cell.style.background = 'rgba(124,106,247,0.06)'; cell.style.borderColor = 'var(--accent)'; }
     }
     this._updateConfirmBar(0, false);
     this._resetGestureDisplay();
@@ -594,7 +650,7 @@ class LGPGame {
 }
 
 // -------------------------------------------------------
-// 5. MEDIAPIPE — câmara + 2 mãos
+// 5. MEDIAPIPE
 // -------------------------------------------------------
 let handsModel, game;
 
@@ -603,10 +659,8 @@ async function initMediaPipe() {
     locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
   });
   handsModel.setOptions({
-    maxNumHands           : 2,
-    modelComplexity       : 1,
-    minDetectionConfidence: 0.75,
-    minTrackingConfidence : 0.60,
+    maxNumHands: 2, modelComplexity: 1,
+    minDetectionConfidence: 0.75, minTrackingConfidence: 0.60,
   });
 
   const canvas = document.getElementById('canvasEl');
@@ -621,27 +675,29 @@ async function initMediaPipe() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-    const ts        = performance.now();
+    const ts = performance.now();
     const handsData = [];
 
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    if (results.multiHandLandmarks?.length > 0) {
       results.multiHandLandmarks.forEach((lm, i) => {
-        const label = results.multiHandedness[i].label;
+        const label   = results.multiHandedness[i].label;
+        const isRight = label === 'Right';
         handsData.push({ label, landmarks: lm });
 
-        const isRight  = label === 'Right';
-        const color    = isRight ? 'rgba(124,106,247,0.6)' : 'rgba(93,200,160,0.6)';
-        const dotColor = isRight ? '#7c6af7' : '#5dc8a0';
+        drawConnectors(ctx, lm, HAND_CONNECTIONS, {
+          color: isRight ? 'rgba(124,106,247,0.65)' : 'rgba(93,200,160,0.65)', lineWidth: 2,
+        });
+        drawLandmarks(ctx, lm, {
+          color: isRight ? '#a89ff9' : '#5dc8a0', lineWidth: 1, radius: 4,
+        });
 
-        drawConnectors(ctx, lm, HAND_CONNECTIONS, { color, lineWidth: 2 });
-        drawLandmarks(ctx, lm, { color: dotColor, lineWidth: 1, radius: 4 });
-
-        // Label sobre a mão no vídeo
         ctx.fillStyle = isRight ? '#a89ff9' : '#5dc8a0';
-        ctx.font      = 'bold 13px monospace';
-        const wx = lm[0].x * canvas.width;
-        const wy = lm[0].y * canvas.height - 14;
-        ctx.fillText(isRight ? '✋ Letra' : '👍 Confirmar', wx - 30, wy);
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(
+          isRight ? '✋ Letra (direita)' : '👍 Confirmar (esquerda)',
+          lm[0].x * canvas.width - 40,
+          lm[0].y * canvas.height - 14
+        );
       });
 
       document.getElementById('statusDot').className    = 'status-dot detecting';
@@ -661,12 +717,10 @@ async function startCamera() {
   const video = document.getElementById('videoEl');
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: 'user' },
-      audio: false,
+      video: { width: 640, height: 480, facingMode: 'user' }, audio: false,
     });
     video.srcObject = stream;
     await video.play();
-
     document.getElementById('camPlaceholder').style.display = 'none';
     document.getElementById('statusDot').className           = 'status-dot active';
     document.getElementById('statusText').textContent        = 'Câmara ativa';
@@ -683,7 +737,7 @@ async function startCamera() {
 }
 
 // -------------------------------------------------------
-// 6. UI GLOBAL
+// 6. UI
 // -------------------------------------------------------
 function buildAlphabetGrid() {
   const grid = document.getElementById('lgpGrid');
@@ -693,23 +747,24 @@ function buildAlphabetGrid() {
     cell.className = 'lgp-cell';
     cell.id        = `lgp-${letter}`;
     cell.title     = info.desc;
+    // Mostra letra grande + 1ª parte da descrição
+    const shortDesc = info.desc.split(',')[0].replace('Punho','P.').replace('dedos','ded.').replace('estendido','ext.').replace('dobrado','dob.');
     cell.innerHTML = `
-      <div class="lgp-hand" style="font-size:1.1rem;font-weight:800;font-family:'Syne',sans-serif">${letter}</div>
-      <div class="lgp-char" style="font-size:0.5rem;line-height:1.2">${info.desc.split(',')[0]}</div>`;
+      <div class="lgp-hand" style="font-size:1.15rem;font-weight:800;font-family:'Syne',sans-serif;line-height:1">${letter}</div>
+      <div class="lgp-char" style="font-size:0.48rem;line-height:1.2;margin-top:2px">${shortDesc}</div>`;
     grid.appendChild(cell);
   });
 }
 
 function updateSwipeIndicator() {
   const el = document.getElementById('swipeIndicator');
-  if (el) el.innerHTML = '<span>👍</span><span>Esquerda confirma</span>';
+  if (el) el.innerHTML = '<span>👍</span><span>Mão esquerda confirma</span>';
 }
 
 let _toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
+  t.textContent = msg; t.classList.add('show');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -722,14 +777,13 @@ function showSwipeHint(e) {
 }
 
 function showResult(correct, word, tries, points) {
-  const overlay = document.getElementById('resultOverlay');
-  document.getElementById('resultEmoji').textContent    = correct ? (tries === 1 ? '🏆' : '🎉') : '😔';
+  document.getElementById('resultEmoji').textContent    = correct ? (tries <= 2 ? '🏆' : '🎉') : '😔';
   document.getElementById('resultTitle').textContent    = correct ? 'Acertaste!' : 'Fim das tentativas';
   document.getElementById('resultWord').textContent     = word;
   document.getElementById('resultSubtitle').textContent = correct
     ? `Soletrou "${word}" em ${tries} tentativa${tries > 1 ? 's' : ''}! +${points} pontos`
     : `A palavra era "${word}". Melhor sorte na próxima!`;
-  overlay.classList.add('show');
+  document.getElementById('resultOverlay').classList.add('show');
 }
 
 function closeResult()      { document.getElementById('resultOverlay').classList.remove('show'); }
@@ -737,9 +791,6 @@ function nextWord()         { closeResult(); if (game) game.nextWord(); }
 function skipWord()         { if (game) game.skipWord(); }
 function resetCurrentWord() { if (game) game.resetWord(); }
 
-// -------------------------------------------------------
-// 7. ARRANQUE
-// -------------------------------------------------------
 async function startGame() {
   document.getElementById('onboard').style.display = 'none';
   buildAlphabetGrid();
