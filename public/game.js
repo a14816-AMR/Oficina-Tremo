@@ -1,47 +1,47 @@
 // =======================================================
-// game.js — LGP Palavras (v2)
-// Melhorias:
-//   1. Confirmação pela mão esquerda (polegar para cima)
-//   2. Alfabeto LGP com descrições corretas (dactilologia portuguesa)
-//   3. Anti-repetição: bloqueia após confirmar até mão sair
+// game.js — LGP Palavras v3
+// Fluxo: mão direita mostra letra → mantém 1s → barra enche
+//        mão esquerda 👍 confirma letra (qualquer das 4)
+//        após 4 letras → verificação estilo TERMO
+//        verde = letra certa e posição certa
+//        amarelo = letra existe mas posição errada
+//        cinzento = letra não existe
 // =======================================================
 
 // -------------------------------------------------------
-// 1. TABELA DO ALFABETO LGP — Dactilologia Portuguesa
-//    Fonte: alfabeto manual usado em Portugal (origem sueca)
-//    Cada letra tem a descrição exata da configuração da mão
+// 1. ALFABETO LGP — Dactilologia Portuguesa
 // -------------------------------------------------------
 const LGP_ALPHABET = {
-  'A': { emoji: '🅐', svg: 'A', desc: 'Punho fechado, polegar estendido para o lado' },
-  'B': { emoji: '🅑', svg: 'B', desc: 'Mão aberta, 4 dedos juntos apontados para cima, polegar dobrado' },
-  'C': { emoji: '🅒', svg: 'C', desc: 'Dedos curvados formando um C, polegar oposto' },
-  'D': { emoji: '🅓', svg: 'D', desc: 'Indicador reto para cima, polegar toca no médio formando D' },
-  'E': { emoji: '🅔', svg: 'E', desc: 'Quatro dedos dobrados, polegar dobrado por baixo' },
-  'F': { emoji: '🅕', svg: 'F', desc: 'Polegar e indicador em círculo (OK), outros dedos estendidos' },
-  'G': { emoji: '🅖', svg: 'G', desc: 'Indicador e polegar apontados horizontalmente para o lado' },
-  'H': { emoji: '🅗', svg: 'H', desc: 'Indicador e médio juntos, estendidos horizontalmente' },
-  'I': { emoji: '🅘', svg: 'I', desc: 'Só o mínimo estendido, outros fechados' },
-  'J': { emoji: '🅙', svg: 'J', desc: 'Mínimo estendido, traça um J no ar' },
-  'K': { emoji: '🅚', svg: 'K', desc: 'Indicador para cima, médio diagonal, polegar entre eles' },
-  'L': { emoji: '🅛', svg: 'L', desc: 'Polegar e indicador formam L a 90°, outros fechados' },
-  'M': { emoji: '🅜', svg: 'M', desc: 'Três dedos (ind+méd+anel) dobrados sobre polegar' },
-  'N': { emoji: '🅝', svg: 'N', desc: 'Dois dedos (ind+médio) dobrados sobre polegar' },
-  'O': { emoji: '🅞', svg: 'O', desc: 'Todos os dedos curvados formando um O com polegar' },
-  'P': { emoji: '🅟', svg: 'P', desc: 'Indicador aponta para baixo, polegar estendido, médio apoia' },
-  'Q': { emoji: '🅠', svg: 'Q', desc: 'Indicador e polegar apontam para baixo' },
-  'R': { emoji: '🅡', svg: 'R', desc: 'Indicador e médio cruzados (entrelaçados)' },
-  'S': { emoji: '🅢', svg: 'S', desc: 'Punho fechado, polegar por cima dos dedos dobrados' },
-  'T': { emoji: '🅣', svg: 'T', desc: 'Polegar entre indicador e médio, punho semifechado' },
-  'U': { emoji: '🅤', svg: 'U', desc: 'Indicador e médio juntos e estendidos para cima' },
-  'V': { emoji: '🅥', svg: 'V', desc: 'Indicador e médio estendidos separados em V' },
-  'W': { emoji: '🅦', svg: 'W', desc: 'Indicador, médio e anelar estendidos e separados' },
-  'X': { emoji: '🅧', svg: 'X', desc: 'Indicador dobrado em gancho/anzol' },
-  'Y': { emoji: '🅨', svg: 'Y', desc: 'Polegar e mínimo estendidos (shaka), outros fechados' },
-  'Z': { emoji: '🅩', svg: 'Z', desc: 'Indicador traça Z no ar, outros fechados' },
+  'A': { desc: 'Punho fechado, polegar estendido para o lado' },
+  'B': { desc: 'Mão aberta, 4 dedos juntos para cima, polegar dobrado' },
+  'C': { desc: 'Dedos curvados formando um C, polegar oposto' },
+  'D': { desc: 'Indicador reto para cima, polegar toca no médio' },
+  'E': { desc: 'Quatro dedos dobrados, polegar dobrado por baixo' },
+  'F': { desc: 'Polegar e indicador em círculo, outros estendidos' },
+  'G': { desc: 'Indicador e polegar horizontais para o lado' },
+  'H': { desc: 'Indicador e médio juntos, horizontais' },
+  'I': { desc: 'Só o mínimo estendido, outros fechados' },
+  'J': { desc: 'Mínimo estendido, traça um J no ar' },
+  'K': { desc: 'Indicador para cima, médio diagonal, polegar entre eles' },
+  'L': { desc: 'Polegar e indicador formam L a 90°' },
+  'M': { desc: 'Três dedos (ind+méd+anel) dobrados sobre o polegar' },
+  'N': { desc: 'Dois dedos (ind+médio) dobrados sobre o polegar' },
+  'O': { desc: 'Todos os dedos curvados formando um O' },
+  'P': { desc: 'Indicador aponta para baixo, polegar estendido' },
+  'Q': { desc: 'Indicador e polegar apontam para baixo' },
+  'R': { desc: 'Indicador e médio cruzados (entrelaçados)' },
+  'S': { desc: 'Punho fechado, polegar por cima dos dedos' },
+  'T': { desc: 'Polegar entre indicador e médio' },
+  'U': { desc: 'Indicador e médio juntos e estendidos para cima' },
+  'V': { desc: 'Indicador e médio separados em V' },
+  'W': { desc: 'Indicador, médio e anelar estendidos e separados' },
+  'X': { desc: 'Indicador dobrado em gancho/anzol' },
+  'Y': { desc: 'Polegar e mínimo estendidos (shaka)' },
+  'Z': { desc: 'Indicador traça Z no ar' },
 };
 
 // -------------------------------------------------------
-// 2. PALAVRAS (4 letras, português)
+// 2. LISTA DE PALAVRAS (4 letras)
 // -------------------------------------------------------
 const WORD_LIST = [
   'CASA','MAPA','BOLA','VELA','FACA','GATO','MESA','LAGO','PATO','ROSA',
@@ -55,37 +55,20 @@ const WORD_LIST = [
 ];
 
 // -------------------------------------------------------
-// 3. CLASSIFICADOR — mão DIREITA (letra) e mão ESQUERDA (confirmar)
+// 3. CLASSIFICADOR DE GESTOS
 // -------------------------------------------------------
 class GestureClassifier {
-  constructor() {
-    this.fistStartX   = null;
-    this.isFistActive = false;
-  }
-
   _features(lm) {
     const tipIds = [4, 8, 12, 16, 20];
     const pipIds = [3, 6, 10, 14, 18];
-    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-    const ext = [];
-    // Polegar: eixo X espelhado
-    ext.push(lm[4].x < lm[3].x ? 1 : 0);
-    // Outros 4 dedos
-    for (let i = 1; i < 5; i++) {
-      ext.push(lm[tipIds[i]].y < lm[pipIds[i]].y ? 1 : 0);
-    }
-
-    return {
-      ext,
-      thumbIndex  : dist(lm[4], lm[8]),
-      thumbMiddle : dist(lm[4], lm[12]),
-      indexMiddle : dist(lm[8], lm[12]),
-      wristX      : lm[0].x,
-    };
+    const dist   = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const ext    = [];
+    ext.push(lm[4].x < lm[3].x ? 1 : 0); // polegar
+    for (let i = 1; i < 5; i++) ext.push(lm[tipIds[i]].y < lm[pipIds[i]].y ? 1 : 0);
+    return { ext, thumbIndex: dist(lm[4], lm[8]), indexMiddle: dist(lm[8], lm[12]) };
   }
 
-  // Classifica gesto da mão DIREITA → letra LGP
+  // Mão DIREITA → letra
   classifyLetter(lm) {
     if (!lm || lm.length < 21) return null;
     const f = this._features(lm);
@@ -98,77 +81,76 @@ class GestureClassifier {
     const idxMid     =  idx &&  mid && !ring && !pink;
     const idxMidRing =  idx &&  mid &&  ring && !pink;
 
-    this.isFistActive = allClosed && !thumb;
-
-    if (allClosed && !thumb)                                return 'A';
-    if (allClosed && thumb && f.thumbIndex < 0.07)          return 'S';
-    if (allOpen && !thumb && f.indexMiddle < 0.07)          return 'B';
-    if (onlyIdx && !thumb && f.thumbIndex > 0.08)          return 'D';
-    if (onlyIdx && !thumb && f.thumbIndex <= 0.08)         return 'X'; // indicador curvado/gancho
-    if (onlyPink && !thumb)                                 return 'I';
-    if (thumb && onlyPink)                                  return 'Y';
-    if (thumb && onlyIdx && f.thumbIndex > 0.12)            return 'L';
-    if (f.thumbIndex < 0.05 && allClosed)                   return 'O';
-    if (f.thumbIndex < 0.06 && mid && ring && pink)         return 'F';
-    if (idxMid && !thumb && f.indexMiddle < 0.035)          return 'R';
-    if (idxMid && !thumb && f.indexMiddle < 0.055)          return 'U';
-    if (idxMid && !thumb && f.indexMiddle >= 0.055)         return 'V';
-    if (idxMidRing && !pink && !thumb)                      return 'W';
-    if (thumb && idxMid && !ring && !pink)                  return 'K';
-    if (!allClosed && !allOpen
-        && f.thumbIndex > 0.06 && f.thumbIndex < 0.18
-        && !idx && !mid)                                    return 'C';
-    if (!idx && !mid && !ring && thumb && !pink
-        && f.thumbIndex < 0.10)                             return 'T';
-    if (!idx && !mid && !ring && thumb && !pink
-        && f.thumbIndex >= 0.10)                            return 'M';
-    if (!idx && !mid && ring && thumb && !pink)             return 'N';
-
+    if (allClosed && !thumb)                                     return 'A';
+    if (allClosed && thumb && f.thumbIndex < 0.07)               return 'S';
+    if (allOpen && !thumb && f.indexMiddle < 0.07)               return 'B';
+    if (onlyIdx && !thumb && f.thumbIndex > 0.08)                return 'D';
+    if (onlyIdx && !thumb && f.thumbIndex <= 0.08)               return 'X';
+    if (onlyPink && !thumb)                                      return 'I';
+    if (thumb && !idx && !mid && !ring && pink)                   return 'Y';
+    if (thumb && onlyIdx && f.thumbIndex > 0.12)                 return 'L';
+    if (f.thumbIndex < 0.05 && allClosed)                        return 'O';
+    if (f.thumbIndex < 0.06 && mid && ring && pink)              return 'F';
+    if (idxMid && !thumb && f.indexMiddle < 0.035)               return 'R';
+    if (idxMid && !thumb && f.indexMiddle < 0.055)               return 'U';
+    if (idxMid && !thumb && f.indexMiddle >= 0.055)              return 'V';
+    if (idxMidRing && !pink && !thumb)                           return 'W';
+    if (thumb && idxMid && !ring && !pink)                       return 'K';
+    if (!allClosed && !allOpen && f.thumbIndex > 0.06 && f.thumbIndex < 0.18 && !idx && !mid) return 'C';
+    if (!idx && !mid && !ring && thumb && !pink && f.thumbIndex < 0.10)  return 'T';
+    if (!idx && !mid && !ring && thumb && !pink && f.thumbIndex >= 0.10) return 'M';
+    if (!idx && !mid && ring && thumb && !pink)                  return 'N';
     return null;
   }
 
-  // Deteta polegar para cima na mão ESQUERDA → confirmar
+  // Mão ESQUERDA → polegar para cima = confirmar 👍
   classifyConfirm(lm) {
     if (!lm || lm.length < 21) return false;
     const f = this._features(lm);
     const [thumb, idx, mid, ring, pink] = f.ext;
-    // Polegar estendido + todos os outros fechados = "thumbs up" de confirmação
     return thumb && !idx && !mid && !ring && !pink;
   }
 }
 
 // -------------------------------------------------------
-// 4. MOTOR DO JOGO
+// 4. MOTOR DO JOGO — estilo TERMO
 // -------------------------------------------------------
 class LGPGame {
   constructor() {
-    this.classifier   = new GestureClassifier();
-    this.words        = this._shuffle([...WORD_LIST]);
-    this.wordIndex    = 0;
-    this.currentWord  = '';
-    this.typedLetters = [];
-    this.currentSlot  = 0;
+    this.clf      = new GestureClassifier();
+    this.words    = this._shuffle([...WORD_LIST]);
+    this.wIdx     = 0;
 
-    // Hold da letra (mão direita)
-    this.HOLD_MS      = 1200;
+    // Estado por tentativa
+    this.target       = '';        // palavra a adivinhar
+    this.currentGuess = ['','','',''];  // letras da tentativa atual
+    this.activeSlot   = 0;         // slot a preencher agora (0-3)
+    this.allGuesses   = [];        // histórico de tentativas [{letters, colors}]
+    this.MAX_TRIES    = 6;
+
+    // Hold da mão direita
+    this.HOLD_MS      = 1100;
     this.holdGesture  = null;
     this.holdStart    = null;
     this.holdProgress = 0;
-    this.letterReady  = false;  // letra a 100%, aguarda confirmação
+    this.letterReady  = false;
 
-    // Anti-repetição: após confirmar, bloqueia até mão desaparecer
+    // Anti-repetição: bloqueia até a mão sair após confirmação
     this.lockedOut    = false;
 
-    // Pontuação
-    this.score   = 0;
-    this.round   = 1;
-    this.streak  = 0;
-    this.history = [];
-    this.attempts= 0;
+    // Cooldown do 👍 para evitar confirmações duplas
+    this.confirmCooldown = false;
+
+    // Estado do jogo
+    this.gameOver  = false;
+    this.round     = 1;
+    this.score     = 0;
+    this.streak    = 0;
+    this.history   = [];
 
     // FPS
-    this.fpsCount= 0;
-    this.fpsTimer= 0;
+    this.fpsCount = 0;
+    this.fpsTimer = 0;
   }
 
   _shuffle(arr) {
@@ -180,55 +162,58 @@ class LGPGame {
   }
 
   newWord() {
-    this.currentWord  = this.words[this.wordIndex % this.words.length];
-    this.wordIndex++;
-    this.typedLetters = [];
-    this.currentSlot  = 0;
-    this.attempts     = 0;
+    this.target       = this.words[this.wIdx % this.words.length];
+    this.wIdx++;
+    this.currentGuess = ['','','',''];
+    this.activeSlot   = 0;
+    this.allGuesses   = [];
     this.holdGesture  = null;
     this.holdStart    = null;
     this.holdProgress = 0;
     this.letterReady  = false;
     this.lockedOut    = false;
+    this.confirmCooldown = false;
+    this.gameOver     = false;
 
     document.getElementById('wrongBar').classList.remove('show');
-    this._renderSlots();
+    this._renderBoard();
     this._highlightAlphabet(null);
     this._updateConfirmBar(0, false);
     this._resetGestureDisplay();
+    this._updateStats();
   }
 
-  // Chamado em cada frame — recebe landmarks de AMBAS as mãos
-  // handsData = array de { label: 'Left'|'Right', landmarks: [...] }
-  processFrame(handsData, timestamp) {
+  // ---- Frame principal ----
+  processFrame(handsData, ts) {
     // FPS
     this.fpsCount++;
-    if (timestamp - this.fpsTimer >= 1000) {
+    if (ts - this.fpsTimer >= 1000) {
       document.getElementById('fpsLabel').textContent = `${this.fpsCount} fps`;
       this.fpsCount = 0;
-      this.fpsTimer = timestamp;
+      this.fpsTimer = ts;
     }
 
-    // Separa mãos
+    if (this.gameOver) return;
+
     let rightHand = null;
     let leftHand  = null;
     for (const h of handsData) {
-      // MediaPipe devolve 'Left'/'Right' do ponto de vista da câmara espelhada
-      // Na câmara espelhada, 'Right' do MediaPipe = mão direita do utilizador
       if (h.label === 'Right') rightHand = h.landmarks;
       if (h.label === 'Left')  leftHand  = h.landmarks;
     }
 
-    // --- Anti-repetição: aguarda mão direita sair depois de confirmar ---
+    // --- Anti-repetição: aguarda mão direita sair ---
     if (this.lockedOut) {
       if (!rightHand) {
         this.lockedOut = false;
         this._resetGestureDisplay();
-        showToast('✋ Mostra o próximo gesto!');
       } else {
-        document.getElementById('gestureName').textContent = '⏳ Retira a mão e mostra o próximo gesto';
+        document.getElementById('gestureName').textContent = '⏳ Retira a mão direita e mostra o próximo gesto';
         document.getElementById('confirmLabel').textContent = 'Afasta a mão para continuar...';
+        document.getElementById('confirmLabel').style.color = 'var(--accent2)';
       }
+      // Permite usar a esquerda para confirmar mesmo sem mover a direita
+      // (caso a letra já esteja pronta de antes)
       return;
     }
 
@@ -238,7 +223,7 @@ class LGPGame {
       return;
     }
 
-    const gesture = this.classifier.classifyLetter(rightHand);
+    const gesture = this.clf.classifyLetter(rightHand);
 
     if (!gesture) {
       this._resetGestureDisplay();
@@ -246,22 +231,23 @@ class LGPGame {
     }
 
     // Atualiza display
-    const info = LGP_ALPHABET[gesture];
-    document.getElementById('gestureEmoji').textContent = gesture; // mostra a letra grande
-    document.getElementById('gestureName').textContent  = info.desc;
+    document.getElementById('gestureEmoji').textContent = gesture;
+    document.getElementById('gestureName').textContent  = LGP_ALPHABET[gesture].desc;
     document.getElementById('gestureOverlay').textContent = `Gesto: ${gesture}`;
     document.getElementById('gestureOverlay').classList.add('show');
     this._highlightAlphabet(gesture);
 
-    // Acumula hold
+    // Pré-visualiza a letra no slot ativo
+    this._previewSlot(this.activeSlot, gesture);
+
+    // Hold
     if (gesture !== this.holdGesture) {
       this.holdGesture  = gesture;
-      this.holdStart    = timestamp;
+      this.holdStart    = ts;
       this.holdProgress = 0;
       this.letterReady  = false;
     } else {
-      const held = timestamp - this.holdStart;
-      this.holdProgress = Math.min(100, (held / this.HOLD_MS) * 100);
+      this.holdProgress = Math.min(100, ((ts - this.holdStart) / this.HOLD_MS) * 100);
     }
 
     if (this.holdProgress >= 100 && !this.letterReady) {
@@ -270,149 +256,253 @@ class LGPGame {
 
     this._updateConfirmBar(this.holdProgress, this.letterReady);
 
-    // --- MÃO ESQUERDA: confirma a letra (polegar para cima) ---
-    if (this.letterReady && leftHand) {
-      const confirming = this.classifier.classifyConfirm(leftHand);
-      if (confirming && this.currentSlot < this.currentWord.length) {
-        this._confirmLetter(this.holdGesture);
+    // --- MÃO ESQUERDA: 👍 confirma a letra ---
+    if (this.letterReady && leftHand && !this.confirmCooldown) {
+      const ok = this.clf.classifyConfirm(leftHand);
+      if (ok) {
+        this._confirmCurrentLetter();
       }
     }
   }
 
-  _confirmLetter(letter) {
-    if (this.currentSlot >= this.currentWord.length) return;
+  _confirmCurrentLetter() {
+    if (this.activeSlot >= 4) return;
+    const letter = this.holdGesture;
+    if (!letter) return;
 
-    this.typedLetters[this.currentSlot] = letter;
+    // Regista a letra
+    this.currentGuess[this.activeSlot] = letter;
+    this._solidifySlot(this.activeSlot, letter);
+    this.activeSlot++;
 
-    const slotLetter = document.getElementById(`slot-letter-${this.currentSlot}`);
-    if (slotLetter) {
-      slotLetter.textContent = letter;
-      slotLetter.style.color = 'var(--text)';
-    }
-    const slotBox = document.getElementById(`slot-${this.currentSlot}`);
-    if (slotBox) slotBox.classList.add('filled');
-
-    this.currentSlot++;
-    this._updateActiveSlot(this.currentSlot);
-
-    // Reset estado
+    // Reset hold
     this.holdGesture  = null;
     this.holdStart    = null;
     this.holdProgress = 0;
     this.letterReady  = false;
-    this.lockedOut    = true; // bloqueia até mão sair
+    this.lockedOut    = true;
+
+    // Cooldown 👍 para não confirmar logo a seguinte
+    this.confirmCooldown = true;
+    setTimeout(() => { this.confirmCooldown = false; }, 1200);
 
     this._updateConfirmBar(0, false);
-    showToast(`✅ Letra "${letter}" confirmada! (${this.currentSlot}/${this.currentWord.length})`);
+    showToast(`✅ "${letter}" confirmada! (${this.activeSlot}/4)`);
 
-    if (this.currentSlot >= this.currentWord.length) {
+    // Se chegou a 4 letras → verifica a palavra
+    if (this.activeSlot >= 4) {
       this.lockedOut = false;
-      setTimeout(() => this._checkWord(), 600);
+      setTimeout(() => this._checkGuess(), 500);
     }
   }
 
-  _checkWord() {
-    const typed = this.typedLetters.join('');
-    this.attempts++;
+  _checkGuess() {
+    const guess  = this.currentGuess.join('');
+    const target = this.target;
+    const colors = this._calcColors(guess, target);
 
-    if (typed === this.currentWord) {
-      const points = Math.max(10, 50 - (this.attempts - 1) * 10);
-      this.score  += points;
+    // Guarda tentativa
+    this.allGuesses.push({ letters: [...this.currentGuess], colors });
+
+    // Anima cores da linha atual
+    this._animateGuessRow(this.allGuesses.length - 1, colors);
+
+    if (guess === target) {
+      // VITÓRIA
+      const pts = Math.max(10, 100 - (this.allGuesses.length - 1) * 15);
+      this.score += pts;
       this.streak++;
       this.round++;
-
-      document.querySelectorAll('.letter-slot').forEach(s => {
-        s.className = 'letter-slot correct';
-      });
-
-      this.history.unshift({ word: this.currentWord, result: 'win', attempts: this.attempts });
+      this.history.unshift({ word: target, result: 'win', tries: this.allGuesses.length });
       this._updateStats();
       this._renderHistory();
-      showResult(true, this.currentWord, this.attempts, points);
-    } else {
+      this.gameOver = true;
+      setTimeout(() => showResult(true, target, this.allGuesses.length, pts), 900);
+    } else if (this.allGuesses.length >= this.MAX_TRIES) {
+      // DERROTA — esgotou tentativas
       this.streak = 0;
-      document.querySelectorAll('.letter-slot').forEach(s => s.classList.add('wrong'));
+      this.history.unshift({ word: target, result: 'lose', tries: this.allGuesses.length });
+      this._updateStats();
+      this._renderHistory();
+      this.gameOver = true;
+      setTimeout(() => showResult(false, target, this.allGuesses.length, 0), 900);
+    } else {
+      // Nova tentativa
       setTimeout(() => {
-        this.typedLetters = [];
-        this.currentSlot  = 0;
+        this.currentGuess = ['','','',''];
+        this.activeSlot   = 0;
+        this.holdGesture  = null;
+        this.holdProgress = 0;
+        this.letterReady  = false;
         this.lockedOut    = false;
-        document.getElementById('wrongBar').classList.add('show');
-        this._renderSlots();
-      }, 900);
+        this.confirmCooldown = false;
+        document.getElementById('wrongBar').classList.remove('show');
+        this._updateActiveRow();
+      }, 800);
     }
     this._updateStats();
   }
 
-  nextWord()  { this.newWord(); }
-  skipWord()  {
-    this.history.unshift({ word: this.currentWord, result: 'skip', attempts: this.attempts });
-    this.streak = 0;
-    this.round++;
-    this._updateStats();
-    this._renderHistory();
-    this.newWord();
-    showToast('Palavra saltada');
+  // Algoritmo de cores estilo Termo/Wordle
+  _calcColors(guess, target) {
+    const colors  = ['grey','grey','grey','grey'];
+    const tArr    = target.split('');
+    const used    = [false,false,false,false];
+
+    // 1ª passagem: verdes (posição certa)
+    for (let i = 0; i < 4; i++) {
+      if (guess[i] === tArr[i]) {
+        colors[i] = 'green';
+        used[i]   = true;
+      }
+    }
+    // 2ª passagem: amarelos (letra existe, posição errada)
+    for (let i = 0; i < 4; i++) {
+      if (colors[i] === 'green') continue;
+      for (let j = 0; j < 4; j++) {
+        if (!used[j] && guess[i] === tArr[j]) {
+          colors[i] = 'yellow';
+          used[j]   = true;
+          break;
+        }
+      }
+    }
+    return colors;
   }
-  resetWord() {
-    this.typedLetters = [];
-    this.currentSlot  = 0;
-    this.holdGesture  = null;
-    this.holdStart    = null;
-    this.holdProgress = 0;
-    this.letterReady  = false;
-    this.lockedOut    = false;
-    document.getElementById('wrongBar').classList.remove('show');
-    this._renderSlots();
-    this._updateConfirmBar(0, false);
-    this._resetGestureDisplay();
-    showToast('Palavra reiniciada');
+
+  // ---- Renderização do tabuleiro ----
+
+  _renderBoard() {
+    const board = document.getElementById('letterTrack');
+    board.innerHTML = '';
+    board.style.display        = 'flex';
+    board.style.flexDirection  = 'column';
+    board.style.gap            = '8px';
+    board.style.alignItems     = 'center';
+
+    // 6 linhas (tentativas)
+    for (let row = 0; row < this.MAX_TRIES; row++) {
+      const rowEl = document.createElement('div');
+      rowEl.id        = `row-${row}`;
+      rowEl.style.cssText = 'display:flex;gap:8px;';
+
+      for (let col = 0; col < 4; col++) {
+        const cell = document.createElement('div');
+        cell.id = `cell-${row}-${col}`;
+        cell.style.cssText = `
+          width:70px; height:70px;
+          border-radius:12px;
+          border:2px solid var(--border2);
+          background:var(--surface);
+          display:flex; align-items:center; justify-content:center;
+          font-size:2rem; font-weight:800;
+          font-family:'Syne',sans-serif;
+          color:var(--text);
+          transition: all 0.2s;
+          position:relative;
+        `;
+
+        // Número da coluna
+        const num = document.createElement('div');
+        num.style.cssText = 'position:absolute;top:4px;right:7px;font-size:0.52rem;font-family:\'Space Mono\',monospace;color:var(--text2);';
+        num.textContent = col + 1;
+        cell.appendChild(num);
+
+        const letter = document.createElement('span');
+        letter.id = `cell-letter-${row}-${col}`;
+        letter.textContent = '';
+        cell.appendChild(letter);
+
+        rowEl.appendChild(cell);
+      }
+      board.appendChild(rowEl);
+    }
+
+    // Esconde progress dots (não usados no modo tabuleiro)
+    document.getElementById('progressDots').innerHTML = '';
+    this._updateActiveRow();
   }
 
-  // --- UI ---
-
-  _renderSlots() {
-    const track = document.getElementById('letterTrack');
-    const dots  = document.getElementById('progressDots');
-    track.innerHTML = '';
-    dots.innerHTML  = '';
-
-    for (let i = 0; i < this.currentWord.length; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'letter-slot' +
-        (i === this.currentSlot ? ' active' : '') +
-        (i < this.typedLetters.length ? ' filled' : '');
-      slot.id = `slot-${i}`;
-
-      const idx = document.createElement('div');
-      idx.className   = 'slot-index';
-      idx.textContent = i + 1;
-
-      const letter = document.createElement('div');
-      letter.className   = 'slot-letter';
-      letter.id          = `slot-letter-${i}`;
-      letter.textContent = this.typedLetters[i] || '?';
-      letter.style.color = this.typedLetters[i] ? 'var(--text)' : 'var(--text2)';
-
-      slot.appendChild(idx);
-      slot.appendChild(letter);
-      track.appendChild(slot);
-
-      const dot = document.createElement('div');
-      dot.className = 'progress-dot' +
-        (i < this.typedLetters.length ? ' done' : '') +
-        (i === this.currentSlot ? ' active' : '');
-      dots.appendChild(dot);
+  _updateActiveRow() {
+    const row = this.allGuesses.length;
+    if (row >= this.MAX_TRIES) return;
+    // Destaca a linha ativa
+    for (let r = 0; r < this.MAX_TRIES; r++) {
+      for (let c = 0; c < 4; c++) {
+        const cell = document.getElementById(`cell-${r}-${c}`);
+        if (!cell) continue;
+        if (r === row) {
+          cell.style.borderColor = 'var(--accent)';
+          cell.style.background  = 'rgba(124,106,247,0.06)';
+        } else if (r > row) {
+          cell.style.borderColor = 'var(--border2)';
+          cell.style.background  = 'var(--surface)';
+        }
+      }
     }
   }
 
-  _updateActiveSlot(idx) {
-    document.querySelectorAll('.letter-slot').forEach((s, i) => {
-      s.classList.toggle('active', i === idx);
+  _previewSlot(col, letter) {
+    const row  = this.allGuesses.length;
+    const span = document.getElementById(`cell-letter-${row}-${col}`);
+    if (span) {
+      span.textContent = letter;
+      span.style.color = 'var(--text2)';
+      span.style.opacity = '0.6';
+    }
+  }
+
+  _solidifySlot(col, letter) {
+    const row  = this.allGuesses.length; // ainda não avançou
+    const cell = document.getElementById(`cell-${row}-${col}`);
+    const span = document.getElementById(`cell-letter-${row}-${col}`);
+    if (span) {
+      span.textContent = letter;
+      span.style.color = 'var(--text)';
+      span.style.opacity = '1';
+    }
+    if (cell) {
+      cell.style.borderColor = 'rgba(124,106,247,0.5)';
+      cell.style.background  = 'rgba(124,106,247,0.12)';
+      // Animação de "bounce"
+      cell.style.transform = 'scale(1.08)';
+      setTimeout(() => { cell.style.transform = 'scale(1)'; }, 150);
+    }
+  }
+
+  _animateGuessRow(rowIdx, colors) {
+    const colorMap = {
+      green : { bg: 'rgba(93,200,160,0.25)',  border: 'var(--success)', text: 'var(--success)' },
+      yellow: { bg: 'rgba(247,198,106,0.25)', border: 'var(--accent2)', text: 'var(--accent2)' },
+      grey  : { bg: 'rgba(80,80,120,0.2)',    border: 'rgba(150,150,180,0.3)', text: 'var(--text2)' },
+    };
+
+    colors.forEach((color, col) => {
+      setTimeout(() => {
+        const cell = document.getElementById(`cell-${rowIdx}-${col}`);
+        const span = document.getElementById(`cell-letter-${rowIdx}-${col}`);
+        if (!cell) return;
+
+        const c = colorMap[color];
+        cell.style.background  = c.bg;
+        cell.style.borderColor = c.border;
+        if (span) span.style.color = c.text;
+
+        // Flip animation
+        cell.style.transform = 'rotateX(90deg)';
+        setTimeout(() => { cell.style.transform = 'rotateX(0deg)'; }, 120);
+      }, col * 180);
     });
-    document.querySelectorAll('.progress-dot').forEach((d, i) => {
-      d.classList.toggle('active', i === idx);
-      if (i < this.typedLetters.length) d.classList.add('done');
-    });
+  }
+
+  // ---- Helpers UI ----
+
+  _highlightAlphabet(letter) {
+    document.querySelectorAll('.lgp-cell').forEach(c => c.classList.remove('highlight'));
+    if (letter) {
+      const cell = document.getElementById(`lgp-${letter}`);
+      if (cell) cell.classList.add('highlight');
+    }
   }
 
   _updateConfirmBar(pct, ready) {
@@ -420,16 +510,15 @@ class LGPGame {
     const label = document.getElementById('confirmLabel');
     fill.style.width      = pct + '%';
     fill.style.background = ready ? 'var(--success)' : 'var(--accent)';
+    label.style.color     = '';
 
     if (ready) {
       label.textContent = '✅ Pronto! Levanta o polegar esquerdo 👍 para confirmar';
       label.style.color = 'var(--success)';
     } else if (pct > 0) {
       label.textContent = `Mantém o gesto... ${Math.round(pct)}%`;
-      label.style.color = '';
     } else {
-      label.textContent = 'Mão direita = letra  |  Mão esquerda 👍 = confirmar';
-      label.style.color = '';
+      label.textContent = 'Mão direita = letra  |  👍 Mão esquerda = confirmar';
     }
   }
 
@@ -438,17 +527,7 @@ class LGPGame {
     document.getElementById('gestureName').textContent  = 'Nenhum gesto detetado';
     document.getElementById('gestureOverlay').classList.remove('show');
     this._highlightAlphabet(null);
-    if (!this.letterReady) {
-      this._updateConfirmBar(this.holdProgress, false);
-    }
-  }
-
-  _highlightAlphabet(letter) {
-    document.querySelectorAll('.lgp-cell').forEach(c => c.classList.remove('highlight'));
-    if (letter) {
-      const cell = document.getElementById(`lgp-${letter}`);
-      if (cell) cell.classList.add('highlight');
-    }
+    this._updateConfirmBar(this.holdProgress, this.letterReady);
   }
 
   _updateStats() {
@@ -460,7 +539,7 @@ class LGPGame {
   _renderHistory() {
     const list = document.getElementById('historyList');
     list.innerHTML = '';
-    if (this.history.length === 0) {
+    if (!this.history.length) {
       list.innerHTML = '<div style="font-family:\'Space Mono\',monospace;font-size:0.72rem;color:var(--text2)">Nenhum jogo ainda...</div>';
       return;
     }
@@ -469,12 +548,48 @@ class LGPGame {
       item.className = 'history-item';
       item.innerHTML = `
         <span class="history-word">${h.word}</span>
-        <span class="history-attempts">${h.attempts}x</span>
-        <span class="history-badge ${h.result}">
-          ${h.result === 'win' ? '✓ Acertou' : '→ Saltou'}
+        <span class="history-attempts">${h.tries}x</span>
+        <span class="history-badge ${h.result === 'win' ? 'win' : 'skip'}">
+          ${h.result === 'win' ? '✓ Ganhou' : '✗ Perdeu'}
         </span>`;
       list.appendChild(item);
     });
+  }
+
+  // Ações dos botões
+  nextWord()  { this.newWord(); }
+  skipWord()  {
+    this.streak = 0;
+    this.history.unshift({ word: this.target, result: 'skip', tries: this.allGuesses.length });
+    this.round++;
+    this._updateStats();
+    this._renderHistory();
+    this.newWord();
+    showToast('Palavra saltada');
+  }
+  resetWord() {
+    this.currentGuess = ['','','',''];
+    this.activeSlot   = 0;
+    this.holdGesture  = null;
+    this.holdStart    = null;
+    this.holdProgress = 0;
+    this.letterReady  = false;
+    this.lockedOut    = false;
+    this.confirmCooldown = false;
+    // Limpa só a linha atual
+    const row = this.allGuesses.length;
+    for (let c = 0; c < 4; c++) {
+      const cell = document.getElementById(`cell-${row}-${c}`);
+      const span = document.getElementById(`cell-letter-${row}-${c}`);
+      if (span) span.textContent = '';
+      if (cell) {
+        cell.style.background  = 'rgba(124,106,247,0.06)';
+        cell.style.borderColor = 'var(--accent)';
+      }
+    }
+    this._updateConfirmBar(0, false);
+    this._resetGestureDisplay();
+    showToast('Linha reiniciada');
   }
 }
 
@@ -487,9 +602,8 @@ async function initMediaPipe() {
   handsModel = new Hands({
     locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
   });
-
   handsModel.setOptions({
-    maxNumHands           : 2,     // ← detetar DUAS mãos
+    maxNumHands           : 2,
     modelComplexity       : 1,
     minDetectionConfidence: 0.75,
     minTrackingConfidence : 0.60,
@@ -507,25 +621,27 @@ async function initMediaPipe() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-    const ts       = performance.now();
+    const ts        = performance.now();
     const handsData = [];
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       results.multiHandLandmarks.forEach((lm, i) => {
-        const label = results.multiHandedness[i].label; // 'Left' ou 'Right'
+        const label = results.multiHandedness[i].label;
         handsData.push({ label, landmarks: lm });
 
-        // Cor diferente por mão
-        const color = label === 'Right' ? 'rgba(124,106,247,0.6)' : 'rgba(93,200,160,0.6)';
-        const dotColor = label === 'Right' ? '#7c6af7' : '#5dc8a0';
+        const isRight  = label === 'Right';
+        const color    = isRight ? 'rgba(124,106,247,0.6)' : 'rgba(93,200,160,0.6)';
+        const dotColor = isRight ? '#7c6af7' : '#5dc8a0';
 
         drawConnectors(ctx, lm, HAND_CONNECTIONS, { color, lineWidth: 2 });
         drawLandmarks(ctx, lm, { color: dotColor, lineWidth: 1, radius: 4 });
 
-        // Label da mão no canvas
-        ctx.fillStyle = label === 'Right' ? '#7c6af7' : '#5dc8a0';
-        ctx.font = '13px monospace';
-        ctx.fillText(label === 'Right' ? '✋ Direita (letra)' : '👍 Esquerda (confirmar)', lm[0].x * canvas.width - 60, lm[0].y * canvas.height - 10);
+        // Label sobre a mão no vídeo
+        ctx.fillStyle = isRight ? '#a89ff9' : '#5dc8a0';
+        ctx.font      = 'bold 13px monospace';
+        const wx = lm[0].x * canvas.width;
+        const wy = lm[0].y * canvas.height - 14;
+        ctx.fillText(isRight ? '✋ Letra' : '👍 Confirmar', wx - 30, wy);
       });
 
       document.getElementById('statusDot').className    = 'status-dot detecting';
@@ -555,15 +671,14 @@ async function startCamera() {
     document.getElementById('statusDot').className           = 'status-dot active';
     document.getElementById('statusText').textContent        = 'Câmara ativa';
 
-    const cameraUtil = new Camera(video, {
+    const cam = new Camera(video, {
       onFrame: async () => { await handsModel.send({ image: video }); },
       width: 640, height: 480,
     });
-    cameraUtil.start();
-
+    cam.start();
   } catch (err) {
-    document.getElementById('statusText').textContent = '❌ Erro: ' + err.message;
-    showToast('Erro ao aceder à câmara: ' + err.message);
+    document.getElementById('statusText').textContent = '❌ ' + err.message;
+    showToast('Erro na câmara: ' + err.message);
   }
 }
 
@@ -578,17 +693,16 @@ function buildAlphabetGrid() {
     cell.className = 'lgp-cell';
     cell.id        = `lgp-${letter}`;
     cell.title     = info.desc;
-    // Mostra a letra grande em vez de emoji
-    cell.innerHTML = `<div class="lgp-hand" style="font-size:1.2rem;font-weight:800;font-family:'Syne',sans-serif">${letter}</div>
-                      <div class="lgp-char" style="font-size:0.55rem;line-height:1.2">${info.desc.split(',')[0]}</div>`;
+    cell.innerHTML = `
+      <div class="lgp-hand" style="font-size:1.1rem;font-weight:800;font-family:'Syne',sans-serif">${letter}</div>
+      <div class="lgp-char" style="font-size:0.5rem;line-height:1.2">${info.desc.split(',')[0]}</div>`;
     grid.appendChild(cell);
   });
 }
 
-// Atualiza o label do swipe indicator para a nova mecânica
 function updateSwipeIndicator() {
   const el = document.getElementById('swipeIndicator');
-  if (el) el.innerHTML = '<span>👍</span><span>Mão esquerda confirma</span>';
+  if (el) el.innerHTML = '<span>👍</span><span>Esquerda confirma</span>';
 }
 
 let _toastTimer;
@@ -597,27 +711,24 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function showSwipeHint(emoji) {
+function showSwipeHint(e) {
   const h = document.getElementById('swipeHint');
   if (!h) return;
-  h.textContent = emoji;
-  h.classList.add('show');
-  setTimeout(() => h.classList.remove('show'), 650);
+  h.textContent = e; h.classList.add('show');
+  setTimeout(() => h.classList.remove('show'), 600);
 }
 
-function showResult(correct, word, attempts, points) {
+function showResult(correct, word, tries, points) {
   const overlay = document.getElementById('resultOverlay');
-  document.getElementById('resultEmoji').textContent =
-    correct ? (attempts === 1 ? '🏆' : '🎉') : '😅';
-  document.getElementById('resultTitle').textContent =
-    correct ? 'Palavra Correta!' : 'Palavra Errada';
-  document.getElementById('resultWord').textContent = word;
+  document.getElementById('resultEmoji').textContent    = correct ? (tries === 1 ? '🏆' : '🎉') : '😔';
+  document.getElementById('resultTitle').textContent    = correct ? 'Acertaste!' : 'Fim das tentativas';
+  document.getElementById('resultWord').textContent     = word;
   document.getElementById('resultSubtitle').textContent = correct
-    ? `Soletrou "${word}" em ${attempts} tentativa${attempts > 1 ? 's' : ''}! +${points} pontos`
-    : `A palavra correta era "${word}". Tenta novamente!`;
+    ? `Soletrou "${word}" em ${tries} tentativa${tries > 1 ? 's' : ''}! +${points} pontos`
+    : `A palavra era "${word}". Melhor sorte na próxima!`;
   overlay.classList.add('show');
 }
 
@@ -631,14 +742,10 @@ function resetCurrentWord() { if (game) game.resetWord(); }
 // -------------------------------------------------------
 async function startGame() {
   document.getElementById('onboard').style.display = 'none';
-
   buildAlphabetGrid();
   updateSwipeIndicator();
   await initMediaPipe();
-
   game = new LGPGame();
   game.newWord();
-  game._updateStats();
-
   await startCamera();
 }
