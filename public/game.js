@@ -716,8 +716,16 @@ async function initMediaPipe() {
 async function startCamera() {
   const video = document.getElementById('videoEl');
   try {
+    // Em mobile (ecrã estreito) pede resolução em retrato (3:4)
+    // Em desktop pede resolução em paisagem (4:3) — evita stream
+    // numa proporção diferente da caixa, que causa distorção/zoom estranho
+    const isMobile = window.innerWidth <= 800;
+    const camWidth  = isMobile ? 480 : 640;
+    const camHeight = isMobile ? 640 : 480;
+
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: 'user' }, audio: false,
+      video: { width: { ideal: camWidth }, height: { ideal: camHeight }, facingMode: 'user' },
+      audio: false,
     });
     video.srcObject = stream;
     await video.play();
@@ -727,7 +735,7 @@ async function startCamera() {
 
     const cam = new Camera(video, {
       onFrame: async () => { await handsModel.send({ image: video }); },
-      width: 640, height: 480,
+      width: camWidth, height: camHeight,
     });
     cam.start();
   } catch (err) {

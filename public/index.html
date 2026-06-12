@@ -35,6 +35,7 @@
     <h1>LGP Palavras</h1>
     <p>Língua Gestual Portuguesa · Estilo Termo · 6 Tentativas</p>
   </div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">☀️ Tema Claro</button>
 </header>
 
 <div class="main-layout">
@@ -63,7 +64,7 @@
 
     <!-- Gesto atual -->
     <div class="gesture-display">
-      <div class="gesture-big" id="gestureEmoji" style="font-size:2.5rem;font-weight:800;font-family:'Syne',sans-serif;min-width:48px;text-align:center">—</div>
+      <div id="gestureSvgBox"><div style="font-size:2.2rem;color:var(--text2);display:flex;align-items:center;justify-content:center;height:100%">—</div></div>
       <div class="gesture-info">
         <div class="gesture-label">Gesto atual (mão direita)</div>
         <div class="gesture-name" id="gestureName">Nenhum gesto detetado</div>
@@ -155,6 +156,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<script src="hand-svg.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
