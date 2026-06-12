@@ -36,6 +36,7 @@ body {
   flex-direction: column;
   align-items: center;
   overflow-x: hidden;
+  
 }
 
 /* Textura de ruído subtil */
@@ -112,6 +113,7 @@ header p {
   border: 1px solid var(--border);
   background: #000;
   aspect-ratio: 4/3;
+  width: 100%;
 }
 
 #videoEl {
@@ -129,6 +131,7 @@ header p {
   inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: cover;
   transform: scaleX(-1);
 }
 
@@ -364,6 +367,7 @@ header p {
   border: 1px solid var(--border2);
   border-radius: 16px;
   padding: 1.25rem;
+  
 }
 
 .panel-title {
@@ -373,6 +377,7 @@ header p {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   margin-bottom: 1rem;
+
 }
 
 /* Estatísticas */
@@ -550,6 +555,8 @@ header p {
   text-align: center;
 }
 
+
+
 .onboard-logo  { font-size: 5rem; }
 .onboard-title { font-size: 3rem; font-weight: 800; letter-spacing: -0.03em; }
 .onboard-sub   { color: var(--text2); font-family: 'Space Mono', monospace; font-size: 0.85rem; max-width: 500px; line-height: 1.7; }
@@ -630,4 +637,8 @@ header p {
 @media (max-width: 800px) {
   .main-layout { grid-template-columns: 1fr; }
   .right-panel { order: -1; }
+
+  .cam-wrapper {
+    aspect-ratio: 3/4; /* retrato no telemóvel, evita distorção */
+  }
 }
