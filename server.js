@@ -92,7 +92,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('\n╔══════════════════════════════════════════╗');
   console.log('║       LGP Palavras — Servidor ativo      ║');
   console.log('╠══════════════════════════════════════════╣');
-  console.log(`║  Local:    http://localhost:${PORT}          ║`);
+  console.log(`║  Local:    http://localhost:${PORT}         ║`);
 
   localIPs.forEach(ip => {
     // Paddings para alinhar a caixa

@@ -1,23 +1,22 @@
 // =======================================================
-// game.js — LGP Palavras v6
-// Melhorias:
-//  - Classificador de gestos mais robusto (mais features)
-//  - Ilustrações SVG do gesto em vez de texto/emoji
-//  - Toggle de tema claro/escuro
+// game.js — LGP Palavras v7
+// UI: bolhas minimalistas na câmara, sem caixa de gesto,
+//     alfabeto só referência (sem botões de clique),
+//     som da letra ao confirmar
 // =======================================================
 
 // -------------------------------------------------------
-// 1. ALFABETO — descrições + nome curto p/ acessibilidade
+// 1. ALFABETO LGP
 // -------------------------------------------------------
 const LGP_ALPHABET = {
-  'A': { desc: 'Punho fechado, polegar estendido ao lado (não por cima)' },
-  'B': { desc: '4 dedos juntos para cima, polegar dobrado contra a palma' },
+  'A': { desc: 'Punho fechado, polegar estendido ao lado' },
+  'B': { desc: '4 dedos juntos para cima, polegar dobrado' },
   'C': { desc: 'Mão em forma de C — dedos e polegar curvados' },
-  'D': { desc: 'Indicador para cima, polegar + outros dedos formam círculo' },
+  'D': { desc: 'Indicador para cima, outros dedos formam arco' },
   'E': { desc: 'Dedos curvados para baixo, polegar por baixo' },
-  'F': { desc: 'Polegar + indicador em OK, 3 dedos estendidos para cima' },
-  'G': { desc: 'Indicador e polegar apontam horizontalmente para o lado' },
-  'H': { desc: 'Indicador e médio juntos, estendidos horizontalmente' },
+  'F': { desc: 'Polegar + indicador em OK, 3 dedos estendidos' },
+  'G': { desc: 'Indicador e polegar horizontais para o lado' },
+  'H': { desc: 'Indicador e médio juntos, horizontalmente' },
   'I': { desc: 'Só o mínimo para cima, outros fechados' },
   'J': { desc: 'Mínimo para cima, traça J no ar' },
   'K': { desc: 'Indicador e médio em V com polegar entre eles' },
@@ -29,8 +28,8 @@ const LGP_ALPHABET = {
   'R': { desc: 'Indicador cruzado por cima do médio' },
   'S': { desc: 'Punho fechado, polegar por cima dos dedos' },
   'T': { desc: 'Polegar sai entre o indicador e o médio' },
-  'U': { desc: 'Indicador e médio juntos, apontados para cima' },
-  'V': { desc: 'Indicador e médio separados em V de vitória' },
+  'U': { desc: 'Indicador e médio juntos para cima' },
+  'V': { desc: 'Indicador e médio separados em V' },
   'W': { desc: 'Indicador, médio e anelar estendidos e separados' },
   'X': { desc: 'Indicador dobrado em gancho/anzol' },
   'Y': { desc: 'Polegar e mínimo estendidos (shaka)' },
@@ -52,223 +51,102 @@ const WORD_LIST = [
 ];
 
 // -------------------------------------------------------
-// 3. CLASSIFICADOR DE GESTOS — v2, mais robusto
-//
-// Melhorias sobre a versão anterior:
-//  - Usa ângulos dos dedos (não só extensão binária)
-//  - Normaliza tudo pela largura da palma (palmSize)
-//  - Sistema de "votação": calcula uma pontuação para
-//    cada letra candidata e escolhe a melhor, em vez de
-//    if/else em cascata (menos sensível à ordem)
-//  - Suaviza com histórico (últimos N frames) para reduzir
-//    "jitter" entre letras parecidas
+// 3. CLASSIFICADOR DE GESTOS
 // -------------------------------------------------------
 class GestureClassifier {
   constructor() {
-    this.history = [];      // últimas classificações para suavização
+    this.history      = [];
     this.HISTORY_SIZE = 5;
   }
 
   _features(lm) {
-    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const d        = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const palmSize = d(lm[0], lm[9]) || 0.001;
 
-    // Extensão de cada dedo: compara distância da ponta ao
-    // pulso vs distância da base (MCP) ao pulso.
-    // Se a ponta está mais longe do pulso que a base → estendido
     const tipIds = [4, 8, 12, 16, 20];
     const mcpIds = [2, 5,  9, 13, 17];
     const pipIds = [3, 6, 10, 14, 18];
 
+    // Extensão: ponta mais longe do pulso que base × 1.15
     const ext = [];
     for (let i = 0; i < 5; i++) {
-      const distTip = d(lm[tipIds[i]], lm[0]);
-      const distMcp = d(lm[mcpIds[i]], lm[0]);
-      ext.push(distTip > distMcp * 1.15 ? 1 : 0);
+      ext.push(d(lm[tipIds[i]], lm[0]) > d(lm[mcpIds[i]], lm[0]) * 1.15 ? 1 : 0);
     }
 
-    // Curvatura: ponta muito perto da palma = bem dobrado
+    // Curvatura: ponta mais perto do pulso que PIP
     const curl = [];
     for (let i = 1; i < 5; i++) {
-      const distTip = d(lm[tipIds[i]], lm[0]);
-      const distPip = d(lm[pipIds[i]], lm[0]);
-      curl.push(distTip < distPip * 0.95 ? 1 : 0);
+      curl.push(d(lm[tipIds[i]], lm[0]) < d(lm[pipIds[i]], lm[0]) * 0.95 ? 1 : 0);
     }
 
-    // Distâncias-chave normalizadas
     const thumbIdx  = d(lm[4], lm[8])   / palmSize;
     const thumbMid  = d(lm[4], lm[12])  / palmSize;
     const idxMid    = d(lm[8], lm[12])  / palmSize;
     const idxRing   = d(lm[8], lm[16])  / palmSize;
     const midRing   = d(lm[12], lm[16]) / palmSize;
-    const thumbTip2Wrist = d(lm[4], lm[0]) / palmSize;
 
-    // Orientação do indicador (vertical vs horizontal)
     const idxDX = Math.abs(lm[8].x - lm[5].x);
     const idxDY = Math.abs(lm[8].y - lm[5].y);
-    const idxAngle = Math.atan2(idxDY, idxDX) * 180 / Math.PI; // 0=horiz, 90=vert
+    const idxAngle     = Math.atan2(idxDY, idxDX) * 180 / Math.PI;
+    const thumbAbove   = lm[4].y < lm[5].y - 0.02;
+    const thumbBetween = lm[4].x > Math.min(lm[6].x, lm[10].x) - 0.04 &&
+                         lm[4].x < Math.max(lm[6].x, lm[10].x) + 0.04 &&
+                         Math.abs(lm[4].y - lm[6].y) < 0.08;
 
-    // Polegar: acima dos dedos (S) ou ao lado (A)?
-    const thumbY = lm[4].y;
-    const indexKnuckleY = lm[5].y;
-    const thumbAboveKnuckles = thumbY < indexKnuckleY - 0.02;
-
-    // Polegar entre indicador e médio (T)
-    const thumbBetweenIdxMid =
-      lm[4].x > Math.min(lm[6].x, lm[10].x) - 0.04 &&
-      lm[4].x < Math.max(lm[6].x, lm[10].x) + 0.04 &&
-      Math.abs(lm[4].y - lm[6].y) < 0.08;
-
-    return {
-      ext, curl,
-      thumbIdx, thumbMid, idxMid, idxRing, midRing, thumbTip2Wrist,
-      idxAngle, thumbAboveKnuckles, thumbBetweenIdxMid,
-      palmSize,
-    };
+    return { ext, curl, thumbIdx, thumbMid, idxMid, idxRing, midRing,
+             idxAngle, thumbAbove, thumbBetween, palmSize };
   }
 
-  // Calcula pontuação 0-1 de quão bem o frame corresponde a cada letra
   _scoreAll(f) {
     const [th, ix, mi, ri, pk] = f.ext;
     const [ic, mc, rc, pc]     = f.curl;
     const scores = {};
 
-    const allOpen   =  ix &&  mi &&  ri &&  pk;
-    const allClosed = !ix && !mi && !ri && !pk;
-    const onlyIdx   =  ix && !mi && !ri && !pk;
-    const onlyPink  = !ix && !mi && !ri &&  pk;
-    const idxMidUp  =  ix &&  mi && !ri && !pk;
-    const idxMidRingUp = ix && mi && ri && !pk;
+    const allOpen      =  ix &&  mi &&  ri &&  pk;
+    const allClosed    = !ix && !mi && !ri && !pk;
+    const onlyIdx      =  ix && !mi && !ri && !pk;
+    const onlyPink     = !ix && !mi && !ri &&  pk;
+    const idxMidUp     =  ix &&  mi && !ri && !pk;
+    const idxMidRingUp =  ix &&  mi &&  ri && !pk;
 
-    // --- A: punho fechado, polegar ao lado ---
-    scores.A = (allClosed && !f.thumbAboveKnuckles) ? 0.9 + (th ? 0.1 : 0) : 0;
-
-    // --- S: punho fechado, polegar por cima ---
-    scores.S = (allClosed && f.thumbAboveKnuckles) ? 1.0 : 0;
-
-    // --- B: 4 dedos juntos para cima, polegar dobrado ---
-    scores.B = (allOpen && !th)
-      ? Math.max(0, 1 - f.idxMid * 3) * Math.max(0, 1 - f.midRing * 3)
-      : 0;
-
-    // --- D: só indicador, polegar toca os outros ---
-    scores.D = (onlyIdx && f.idxAngle > 45)
-      ? (f.thumbMid < 0.6 ? 0.95 : 0.6)
-      : 0;
-
-    // --- I: só mínimo ---
+    scores.A = (allClosed && !f.thumbAbove) ? 0.9 + (th ? 0.1 : 0) : 0;
+    scores.S = (allClosed && f.thumbAbove) ? 1.0 : 0;
+    scores.B = (allOpen && !th) ? Math.max(0, 1 - f.idxMid * 3) * Math.max(0, 1 - f.midRing * 3) : 0;
+    scores.D = (onlyIdx && f.idxAngle > 45) ? (f.thumbMid < 0.6 ? 0.95 : 0.6) : 0;
     scores.I = (onlyPink && !th) ? 0.95 : 0;
-
-    // --- Y: polegar + mínimo (shaka) ---
     scores.Y = (th && !ix && !mi && !ri && pk) ? 0.95 : 0;
-
-    // --- L: polegar + indicador em L ---
-    scores.L = (th && onlyIdx && f.thumbIdx > 0.6)
-      ? Math.min(1, f.thumbIdx / 0.9)
-      : 0;
-
-    // --- O: todos curvados em O ---
-    scores.O = (allClosed && f.thumbIdx < 0.35 && !f.thumbAboveKnuckles)
-      ? Math.max(0, 1 - f.thumbIdx * 2)
-      : 0;
-
-    // --- F: OK + 3 dedos estendidos ---
-    scores.F = (f.thumbIdx < 0.35 && mi && ri && pk && !ix)
-      ? Math.max(0, 1 - f.thumbIdx * 2)
-      : 0;
-
-    // --- C: forma de C ---
-    scores.C = (!ix && !mi && !ri && !pk && !th
-                && f.thumbIdx > 0.35 && f.thumbIdx < 0.85
-                && !ic) ? 0.7 : 0;
-
-    // --- E: dedos curvados para baixo, polegar por baixo ---
-    scores.E = (ic && mc && rc && pc && !f.thumbAboveKnuckles && f.thumbIdx > 0.3)
-      ? 0.65
-      : 0;
-
-    // --- R: indicador cruzado com médio (muito juntos) ---
-    scores.R = (idxMidUp && f.idxMid < 0.18)
-      ? Math.max(0, 1 - f.idxMid * 5)
-      : 0;
-
-    // --- U: indicador+médio juntos para cima ---
-    scores.U = (idxMidUp && f.idxMid >= 0.18 && f.idxMid < 0.4 && !th)
-      ? 0.85
-      : 0;
-
-    // --- V: indicador+médio separados ---
-    scores.V = (idxMidUp && f.idxMid >= 0.4 && !th)
-      ? Math.min(1, f.idxMid)
-      : 0;
-
-    // --- K: V com polegar entre os dedos ---
-    scores.K = (th && idxMidUp && f.idxMid >= 0.3)
-      ? 0.8
-      : 0;
-
-    // --- W: 3 dedos separados ---
-    scores.W = (idxMidRingUp && !pk && !th && f.idxRing > 0.45)
-      ? 0.85
-      : 0;
-
-    // --- X: indicador em gancho ---
-    scores.X = (!mi && !ri && !pk && !th && !ix && ic)
-      ? 0.75
-      : 0;
-
-    // --- H: indicador+médio horizontais e juntos ---
-    scores.H = (idxMidUp && f.idxMid < 0.4 && f.idxAngle < 40)
-      ? 0.8
-      : 0;
-
-    // --- G: indicador+polegar horizontais ---
-    scores.G = (onlyIdx && th && f.idxAngle < 40 && f.thumbIdx > 0.4)
-      ? 0.8
-      : 0;
-
-    // --- P: indicador para baixo com polegar ---
-    scores.P = (onlyIdx && th && f.idxAngle > 45 && f.thumbMid >= 0.6)
-      ? 0.6
-      : 0;
-
-    // --- T: polegar entre indicador e médio ---
-    scores.T = (allClosed && f.thumbBetweenIdxMid)
-      ? 0.75
-      : 0;
-
-    // --- M: 3 dedos dobrados sobre polegar ---
-    scores.M = (!ix && !mi && !ri && th && !pk && ic && mc && rc && !f.thumbAboveKnuckles)
-      ? 0.6
-      : 0;
-
-    // --- N: 2 dedos dobrados sobre polegar ---
-    scores.N = (!ix && !mi && ri && th && !pk && ic && mc && !f.thumbAboveKnuckles)
-      ? 0.6
-      : 0;
+    scores.L = (th && onlyIdx && f.thumbIdx > 0.6) ? Math.min(1, f.thumbIdx / 0.9) : 0;
+    scores.O = (allClosed && f.thumbIdx < 0.35 && !f.thumbAbove) ? Math.max(0, 1 - f.thumbIdx * 2) : 0;
+    scores.F = (f.thumbIdx < 0.35 && mi && ri && pk && !ix) ? Math.max(0, 1 - f.thumbIdx * 2) : 0;
+    scores.C = (!ix && !mi && !ri && !pk && !th && f.thumbIdx > 0.35 && f.thumbIdx < 0.85 && !ic) ? 0.7 : 0;
+    scores.E = (ic && mc && rc && pc && !f.thumbAbove && f.thumbIdx > 0.3) ? 0.65 : 0;
+    scores.R = (idxMidUp && f.idxMid < 0.18) ? Math.max(0, 1 - f.idxMid * 5) : 0;
+    scores.U = (idxMidUp && f.idxMid >= 0.18 && f.idxMid < 0.4 && !th) ? 0.85 : 0;
+    scores.V = (idxMidUp && f.idxMid >= 0.4 && !th) ? Math.min(1, f.idxMid) : 0;
+    scores.K = (th && idxMidUp && f.idxMid >= 0.3) ? 0.8 : 0;
+    scores.W = (idxMidRingUp && !pk && !th && f.idxRing > 0.45) ? 0.85 : 0;
+    scores.X = (!mi && !ri && !pk && !th && !ix && ic) ? 0.75 : 0;
+    scores.H = (idxMidUp && f.idxMid < 0.4 && f.idxAngle < 40) ? 0.8 : 0;
+    scores.G = (onlyIdx && th && f.idxAngle < 40 && f.thumbIdx > 0.4) ? 0.8 : 0;
+    scores.P = (onlyIdx && th && f.idxAngle > 45 && f.thumbMid >= 0.6) ? 0.6 : 0;
+    scores.T = (allClosed && f.thumbBetween) ? 0.75 : 0;
+    scores.M = (!ix && !mi && !ri && th && !pk && ic && mc && rc && !f.thumbAbove) ? 0.6 : 0;
+    scores.N = (!ix && !mi && ri && th && !pk && ic && mc && !f.thumbAbove) ? 0.6 : 0;
 
     return scores;
   }
 
-  // Devolve { letter, confidence } da melhor correspondência (ou null)
   classifyLetter(lm) {
     if (!lm || lm.length < 21) { this.history = []; return null; }
-
-    const f = this._features(lm);
+    const f      = this._features(lm);
     const scores = this._scoreAll(f);
 
     let best = null, bestScore = 0;
     for (const [letter, score] of Object.entries(scores)) {
       if (score > bestScore) { bestScore = score; best = letter; }
     }
+    if (bestScore < 0.45) { this.history = []; return null; }
 
-    // Limiar mínimo de confiança
-    if (bestScore < 0.45) {
-      this.history = [];
-      return null;
-    }
-
-    // Suavização: adiciona ao histórico e devolve o mais frequente
     this.history.push(best);
     if (this.history.length > this.HISTORY_SIZE) this.history.shift();
 
@@ -278,11 +156,9 @@ class GestureClassifier {
     for (const [l, c] of Object.entries(counts)) {
       if (c > stableCount) { stableCount = c; stable = l; }
     }
-
     return stable;
   }
 
-  // Mão esquerda — polegar para cima = confirmar 👍
   classifyConfirm(lm) {
     if (!lm || lm.length < 21) return false;
     const f = this._features(lm);
@@ -321,12 +197,11 @@ class LGPGame {
     this.streak   = 0;
     this.history  = [];
 
+    // Estado visual de cada letra no alfabeto
+    this.letterStates = {};
+
     this.fpsCount = 0;
     this.fpsTimer = 0;
-
-    // Estado de cada letra do alfabeto para feedback visual
-    // null = não usada | 'green' = certa | 'yellow' = existe | 'grey' = eliminada
-    this.letterStates = {};
   }
 
   _shuffle(arr) {
@@ -356,11 +231,12 @@ class LGPGame {
     this._renderBoard();
     this._highlightAlphabet(null);
     this._updateAlphabetStates();
-    this._updateConfirmBar(0, false);
-    this._resetGestureDisplay();
+    this._updateBubble(0, false);
+    this._resetBubble();
     this._updateStats();
   }
 
+  // ---- processFrame ----
   processFrame(handsData, ts) {
     this.fpsCount++;
     if (ts - this.fpsTimer >= 1000) {
@@ -377,30 +253,28 @@ class LGPGame {
       if (h.label === 'Left')  leftHand  = h.landmarks;
     }
 
-    // Anti-repetição
+    // Anti-repetição: aguarda mão direita sair
     if (this.lockedOut) {
       if (!rightHand) {
         this.lockedOut = false;
-        this._resetGestureDisplay();
-      } else {
-        document.getElementById('gestureName').textContent  = '⏳ Retira a mão direita e mostra o próximo gesto';
-        document.getElementById('confirmLabel').textContent = 'Afasta a mão para continuar...';
-        document.getElementById('confirmLabel').style.color = 'var(--accent2)';
+        this._resetBubble();
       }
+      // bolha esquerda: mostra seta de "retira a mão"
+      const bl = document.getElementById('bubbleLetter');
+      if (bl) bl.textContent = '↺';
       return;
     }
 
-    if (!rightHand) { this._resetGestureDisplay(); return; }
+    if (!rightHand) { this._resetBubble(); return; }
 
     const gesture = this.clf.classifyLetter(rightHand);
+    if (!gesture) { this._resetBubble(); return; }
 
-    if (!gesture) { this._resetGestureDisplay(); return; }
+    // Atualiza bolha esquerda com a letra
+    const bl = document.getElementById('bubbleLetter');
+    if (bl) bl.textContent = gesture;
 
-    // Atualiza UI: mostra ilustração SVG do gesto
-    this._showGestureSVG(gesture);
-    document.getElementById('gestureName').textContent  = `${gesture} — ${LGP_ALPHABET[gesture].desc}`;
-    document.getElementById('gestureOverlay').textContent = `Gesto: ${gesture}`;
-    document.getElementById('gestureOverlay').classList.add('show');
+    // Destaca no alfabeto
     this._highlightAlphabet(gesture);
     this._previewSlot(this.activeSlot, gesture);
 
@@ -414,17 +288,17 @@ class LGPGame {
       this.holdProgress = Math.min(100, ((ts - this.holdStart) / this.HOLD_MS) * 100);
     }
     if (this.holdProgress >= 100) this.letterReady = true;
-    this._updateConfirmBar(this.holdProgress, this.letterReady);
+    this._updateBubble(this.holdProgress, this.letterReady);
 
     // Confirmação pela mão esquerda 👍
     if (this.letterReady && leftHand && !this.confirmCooldown) {
       if (this.clf.classifyConfirm(leftHand)) {
-        this._confirmCurrentLetter();
+        this._confirmLetter();
       }
     }
   }
 
-  _confirmCurrentLetter() {
+  _confirmLetter() {
     if (this.activeSlot >= 4) return;
     const letter = this.holdGesture;
     if (!letter) return;
@@ -442,11 +316,21 @@ class LGPGame {
     this.confirmCooldown = true;
     setTimeout(() => { this.confirmCooldown = false; }, 1200);
 
-    this._updateConfirmBar(0, false);
-
-    // 🔊 Fala a letra em voz alta
+    // 🔊 Som da letra
     speakLetter(letter);
 
+    // Flash de confirmação na bolha direita
+    const cb = document.getElementById('camConfirmBubble');
+    if (cb) {
+      cb.textContent = '✅';
+      cb.classList.add('show', 'flash');
+      setTimeout(() => {
+        cb.classList.remove('flash');
+        cb.textContent = '👍';
+      }, 600);
+    }
+
+    this._updateBubble(0, false);
     showToast(`✅ "${letter}" confirmada! (${this.activeSlot}/4)`);
 
     if (this.activeSlot >= 4) {
@@ -455,49 +339,17 @@ class LGPGame {
     }
   }
 
-  // Confirmação directa por botão (sem need de holdGesture estar ativo)
-  _forceConfirmLetter(letter) {
-    if (this.activeSlot >= 4) return;
-    if (this.gameOver) return;
-
-    this.currentGuess[this.activeSlot] = letter;
-    this._solidifySlot(this.activeSlot, letter);
-    this.activeSlot++;
-
-    this.holdGesture     = null;
-    this.holdStart       = null;
-    this.holdProgress    = 0;
-    this.letterReady     = false;
-    this.lockedOut       = false;   // botão não exige sair a mão
-    this.confirmCooldown = true;
-    setTimeout(() => { this.confirmCooldown = false; }, 800);
-
-    this._updateConfirmBar(0, false);
-
-    // 🔊 Fala a letra
-    speakLetter(letter);
-
-    showToast(`✅ "${letter}" confirmada! (${this.activeSlot}/4)`);
-    this._updateStats();
-
-    if (this.activeSlot >= 4) {
-      setTimeout(() => this._checkGuess(), 500);
-    }
-  }
-
-
   _checkGuess() {
     const guess  = this.currentGuess.join('');
     const colors = this._calcColors(guess, this.target);
     this.allGuesses.push({ letters: [...this.currentGuess], colors });
     this._animateGuessRow(this.allGuesses.length - 1, colors);
 
-    // Atualiza estado de cada letra usada nesta tentativa
-    // Prioridade: green > yellow > grey (nunca rebaixa uma letra)
-    const priority = { green: 3, yellow: 2, grey: 1, undefined: 0 };
+    // Atualiza estados das letras (prioridade: green > yellow > grey)
+    const priority = { green: 3, yellow: 2, grey: 1 };
     for (let i = 0; i < 4; i++) {
-      const letter = this.currentGuess[i];
-      const color  = colors[i];
+      const letter  = this.currentGuess[i];
+      const color   = colors[i];
       const current = this.letterStates[letter];
       if ((priority[color] || 0) > (priority[current] || 0)) {
         this.letterStates[letter] = color;
@@ -515,6 +367,7 @@ class LGPGame {
       this._renderHistory();
       this.gameOver = true;
       setTimeout(() => showResult(true, this.target, this.allGuesses.length, pts), 900);
+
     } else if (this.allGuesses.length >= this.MAX_TRIES) {
       this.streak = 0;
       this.history.unshift({ word: this.target, result: 'lose', tries: this.allGuesses.length });
@@ -522,6 +375,7 @@ class LGPGame {
       this._renderHistory();
       this.gameOver = true;
       setTimeout(() => showResult(false, this.target, this.allGuesses.length, 0), 900);
+
     } else {
       setTimeout(() => {
         this.currentGuess    = ['','','',''];
@@ -542,7 +396,6 @@ class LGPGame {
     const colors = ['grey','grey','grey','grey'];
     const tArr   = target.split('');
     const used   = [false,false,false,false];
-
     for (let i = 0; i < 4; i++) {
       if (guess[i] === tArr[i]) { colors[i] = 'green'; used[i] = true; }
     }
@@ -558,7 +411,6 @@ class LGPGame {
   }
 
   // ---- Tabuleiro ----
-
   _renderBoard() {
     const board = document.getElementById('letterTrack');
     board.innerHTML = '';
@@ -572,28 +424,25 @@ class LGPGame {
       for (let col = 0; col < 4; col++) {
         const cell = document.createElement('div');
         cell.id = `cell-${row}-${col}`;
-        cell.className = 'board-cell';
         cell.style.cssText = `
-          width:70px;height:70px;border-radius:12px;
+          width:68px;height:68px;border-radius:12px;
           border:2px solid var(--border2);background:var(--surface);
           display:flex;align-items:center;justify-content:center;
-          font-size:2rem;font-weight:800;font-family:'Syne',sans-serif;
+          font-size:1.9rem;font-weight:800;font-family:'Syne',sans-serif;
           color:var(--text);transition:all 0.25s;position:relative;
         `;
         const num = document.createElement('div');
-        num.style.cssText = 'position:absolute;top:4px;right:7px;font-size:0.52rem;font-family:\'Space Mono\',monospace;color:var(--text2);';
+        num.style.cssText = 'position:absolute;top:4px;right:6px;font-size:0.5rem;font-family:\'Space Mono\',monospace;color:var(--text2);';
         num.textContent = col + 1;
 
         const span = document.createElement('span');
         span.id = `cell-letter-${row}-${col}`;
-
         cell.appendChild(num);
         cell.appendChild(span);
         rowEl.appendChild(cell);
       }
       board.appendChild(rowEl);
     }
-
     document.getElementById('progressDots').innerHTML = '';
     this._updateActiveRow();
   }
@@ -618,7 +467,7 @@ class LGPGame {
   _previewSlot(col, letter) {
     const row  = this.allGuesses.length;
     const span = document.getElementById(`cell-letter-${row}-${col}`);
-    if (span) { span.textContent = letter; span.style.color = 'var(--text2)'; span.style.opacity = '0.6'; }
+    if (span) { span.textContent = letter; span.style.color = 'var(--text2)'; span.style.opacity = '0.55'; }
   }
 
   _solidifySlot(col, letter) {
@@ -629,7 +478,7 @@ class LGPGame {
     if (cell) {
       cell.style.borderColor = 'rgba(124,106,247,0.6)';
       cell.style.background  = 'rgba(124,106,247,0.12)';
-      cell.style.transform   = 'scale(1.09)';
+      cell.style.transform   = 'scale(1.08)';
       setTimeout(() => { cell.style.transform = 'scale(1)'; }, 160);
     }
   }
@@ -655,68 +504,67 @@ class LGPGame {
     });
   }
 
-  // ---- Ilustração do gesto ----
-  _showGestureSVG(letter) {
-    const container = document.getElementById('gestureSvgBox');
-    if (!container) return;
-    container.innerHTML = getHandSVG(letter);
-  }
+  // ---- Bolhas minimalistas na câmara ----
 
-  _highlightAlphabet(letter) {
-    document.querySelectorAll('.lgp-cell').forEach(c => c.classList.remove('highlight'));
-    if (letter) { const cell = document.getElementById(`lgp-${letter}`); if (cell) cell.classList.add('highlight'); }
-  }
+  // Atualiza o anel de progresso e visibilidade das bolhas
+  _updateBubble(pct, ready) {
+    const bubble  = document.getElementById('camLetterBubble');
+    const ringEl  = document.getElementById('ringFill');
+    const confirm = document.getElementById('camConfirmBubble');
 
-  // Aplica classes visuais aos botões do alfabeto conforme o estado de cada letra
-  _updateAlphabetStates() {
-    Object.keys(LGP_ALPHABET).forEach(letter => {
-      const btn = document.getElementById(`lgp-${letter}`);
-      if (!btn) return;
+    // Circunferência do círculo r=24: 2π×24 ≈ 150.8
+    const CIRC  = 150.8;
+    const offset = CIRC - (pct / 100) * CIRC;
 
-      // Remove classes anteriores
-      btn.classList.remove('letter-green', 'letter-yellow', 'letter-grey');
+    if (ringEl) ringEl.style.strokeDashoffset = offset;
 
-      const state = this.letterStates[letter];
-      if (state === 'green') {
-        btn.classList.add('letter-green');
-        btn.disabled = false; // letra certa — pode re-usar
-      } else if (state === 'yellow') {
-        btn.classList.add('letter-yellow');
-        btn.disabled = false; // letra existe — pode re-usar
-      } else if (state === 'grey') {
-        btn.classList.add('letter-grey');
-        btn.disabled = true;  // letra eliminada — não clicável
-      } else {
-        btn.disabled = false; // não usada ainda
-      }
-    });
-  }
+    if (bubble) {
+      if (pct > 0 || ready) bubble.classList.add('show');
+      else                  bubble.classList.remove('show');
+      bubble.classList.toggle('ready', ready);
+    }
 
-  _updateConfirmBar(pct, ready) {
-    const fill  = document.getElementById('confirmFill');
-    const label = document.getElementById('confirmLabel');
-    fill.style.width      = pct + '%';
-    fill.style.background = ready ? 'var(--success)' : 'var(--accent)';
-    label.style.color     = '';
-    if (ready) {
-      label.textContent = '✅ Pronto! Levanta o polegar esquerdo 👍 para confirmar';
-      label.style.color = 'var(--success)';
-    } else if (pct > 0) {
-      label.textContent = `Mantém o gesto... ${Math.round(pct)}%`;
-    } else {
-      label.textContent = 'Mão direita = letra  |  👍 Mão esquerda = confirmar';
+    // Bolha direita 👍 só aparece quando a letra está a 100%
+    if (confirm && !confirm.classList.contains('flash')) {
+      confirm.classList.toggle('show', ready);
     }
   }
 
-  _resetGestureDisplay() {
-    const container = document.getElementById('gestureSvgBox');
-    if (container) container.innerHTML = `<div style="font-size:2.2rem;color:var(--text2);display:flex;align-items:center;justify-content:center;height:100%">—</div>`;
-    document.getElementById('gestureName').textContent  = 'Nenhum gesto detetado';
-    document.getElementById('gestureOverlay').classList.remove('show');
+  _resetBubble() {
+    const bubble  = document.getElementById('camLetterBubble');
+    const bl      = document.getElementById('bubbleLetter');
+    const confirm = document.getElementById('camConfirmBubble');
+    const ring    = document.getElementById('ringFill');
+
+    if (bubble)  bubble.classList.remove('show', 'ready');
+    if (bl)      bl.textContent = '—';
+    if (ring)    ring.style.strokeDashoffset = '150.8';
+    if (confirm && !confirm.classList.contains('flash')) {
+      confirm.classList.remove('show');
+    }
     this._highlightAlphabet(null);
-    this._updateConfirmBar(this.holdProgress, this.letterReady);
   }
 
+  // ---- Alfabeto ----
+  _highlightAlphabet(letter) {
+    document.querySelectorAll('.lgp-cell').forEach(c => c.classList.remove('highlight'));
+    if (letter) {
+      const cell = document.getElementById(`lgp-${letter}`);
+      if (cell) cell.classList.add('highlight');
+    }
+  }
+
+  _updateAlphabetStates() {
+    Object.keys(LGP_ALPHABET).forEach(letter => {
+      const el = document.getElementById(`lgp-${letter}`);
+      if (!el) return;
+      el.classList.remove('letter-green', 'letter-yellow', 'letter-grey');
+      const state = this.letterStates[letter];
+      if (state) el.classList.add(`letter-${state}`);
+    });
+  }
+
+  // ---- Stats & History ----
   _updateStats() {
     document.getElementById('scoreVal').textContent  = this.score;
     document.getElementById('roundVal').textContent  = this.round;
@@ -767,8 +615,8 @@ class LGPGame {
       if (span) span.textContent = '';
       if (cell) { cell.style.background = 'rgba(124,106,247,0.06)'; cell.style.borderColor = 'var(--accent)'; }
     }
-    this._updateConfirmBar(0, false);
-    this._resetGestureDisplay();
+    this._updateBubble(0, false);
+    this._resetBubble();
     showToast('Linha reiniciada');
   }
 }
@@ -809,19 +657,11 @@ async function initMediaPipe() {
         handsData.push({ label, landmarks: lm });
 
         drawConnectors(ctx, lm, HAND_CONNECTIONS, {
-          color: isRight ? 'rgba(124,106,247,0.65)' : 'rgba(93,200,160,0.65)', lineWidth: 2,
+          color: isRight ? 'rgba(124,106,247,0.6)' : 'rgba(93,200,160,0.6)', lineWidth: 2,
         });
         drawLandmarks(ctx, lm, {
-          color: isRight ? '#a89ff9' : '#5dc8a0', lineWidth: 1, radius: 4,
+          color: isRight ? '#a89ff9' : '#5dc8a0', lineWidth: 1, radius: 3,
         });
-
-        ctx.fillStyle = isRight ? '#a89ff9' : '#5dc8a0';
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(
-          isRight ? '✋ Letra (direita)' : '👍 Confirmar (esquerda)',
-          lm[0].x * canvas.width - 40,
-          lm[0].y * canvas.height - 14
-        );
       });
 
       document.getElementById('statusDot').className    = 'status-dot detecting';
@@ -841,11 +681,11 @@ async function startCamera() {
   const video = document.getElementById('videoEl');
   try {
     const isMobile = window.innerWidth <= 800;
-    const camWidth  = isMobile ? 480 : 640;
-    const camHeight = isMobile ? 640 : 480;
+    const camW = isMobile ? 480 : 640;
+    const camH = isMobile ? 640 : 480;
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: camWidth }, height: { ideal: camHeight }, facingMode: 'user' },
+      video: { width: { ideal: camW }, height: { ideal: camH }, facingMode: 'user' },
       audio: false,
     });
     video.srcObject = stream;
@@ -856,7 +696,7 @@ async function startCamera() {
 
     const cam = new Camera(video, {
       onFrame: async () => { await handsModel.send({ image: video }); },
-      width: camWidth, height: camHeight,
+      width: camW, height: camH,
     });
     cam.start();
   } catch (err) {
@@ -869,7 +709,7 @@ async function startCamera() {
 // 6. UI GLOBAL
 // -------------------------------------------------------
 
-// Fala a letra em voz alta usando Web Speech API
+// Som da letra
 function speakLetter(letter) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -880,51 +720,27 @@ function speakLetter(letter) {
   window.speechSynthesis.speak(utter);
 }
 
-// Chamado quando o utilizador clica num botão do alfabeto
-function onAlphabetButtonClick(letter) {
-  if (!game || game.gameOver) return;
-  if (game.activeSlot >= 4) return;
-  // Bloqueia letras eliminadas (grey)
-  if (game.letterStates[letter] === 'grey') return;
-
-  // Mostra o gesto na caixa de display
-  game._showGestureSVG(letter);
-  document.getElementById('gestureName').textContent = `${letter} — ${LGP_ALPHABET[letter].desc}`;
-  game._highlightAlphabet(letter);
-  game._previewSlot(game.activeSlot, letter);
-
-  // Confirma a letra directamente (como se fosse por gesto)
-  game.holdGesture = letter;
-  game.letterReady = true;
-  game._forceConfirmLetter(letter);
-}
-
+// Alfabeto como referência visual (divs, não botões)
 function buildAlphabetGrid() {
   const grid = document.getElementById('lgpGrid');
   grid.innerHTML = '';
   Object.entries(LGP_ALPHABET).forEach(([letter, info]) => {
-    const btn = document.createElement('button');
-    btn.className   = 'lgp-cell lgp-btn';
-    btn.id          = `lgp-${letter}`;
-    btn.title       = info.desc;
-    btn.setAttribute('aria-label', `Letra ${letter}: ${info.desc}`);
-    btn.onclick     = () => onAlphabetButtonClick(letter);
-    btn.innerHTML   = `
+    const cell = document.createElement('div');
+    cell.className = 'lgp-cell';
+    cell.id        = `lgp-${letter}`;
+    cell.title     = info.desc;
+    cell.innerHTML = `
       <div class="lgp-hand-svg">${getHandSVG(letter)}</div>
       <div class="lgp-char">${letter}</div>`;
-    grid.appendChild(btn);
+    grid.appendChild(cell);
   });
-}
-
-function updateSwipeIndicator() {
-  const el = document.getElementById('swipeIndicator');
-  if (el) el.innerHTML = '<span>👍</span><span>Mão esquerda confirma</span>';
 }
 
 let _toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
+  t.textContent = msg;
+  t.classList.add('show');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -944,39 +760,34 @@ function nextWord()         { closeResult(); if (game) game.nextWord(); }
 function skipWord()         { if (game) game.skipWord(); }
 function resetCurrentWord() { if (game) game.resetWord(); }
 
-// -------------------------------------------------------
-// 7. TEMA CLARO / ESCURO
-// -------------------------------------------------------
+// Tema claro/escuro
 function initTheme() {
-  const saved = localStorage.getItem('lgp-theme');
-  const theme = saved || 'dark';
-  applyTheme(theme);
+  const saved = (() => { try { return localStorage.getItem('lgp-theme'); } catch(e){ return null; } })();
+  applyTheme(saved || 'dark');
 }
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  try { localStorage.setItem('lgp-theme', theme); } catch (e) {}
+  try { localStorage.setItem('lgp-theme', theme); } catch(e) {}
   const btn = document.getElementById('themeToggle');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️ Tema Claro' : '🌙 Tema Escuro';
+  if (btn) btn.textContent = theme === 'dark' ? '☀️ Claro' : '🌙 Escuro';
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
 }
 
 // -------------------------------------------------------
-// 8. ARRANQUE
+// 7. ARRANQUE
 // -------------------------------------------------------
 async function startGame() {
   document.getElementById('onboard').style.display = 'none';
   buildAlphabetGrid();
-  updateSwipeIndicator();
   await initMediaPipe();
   game = new LGPGame();
   game.newWord();
   await startCamera();
 }
 
-// Inicializa tema mesmo antes de iniciar o jogo (afeta onboarding também)
 initTheme();
